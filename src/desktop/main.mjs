@@ -4,7 +4,7 @@ import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { realpath, stat, writeFile, copyFile, readFile } from 'node:fs/promises';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { execFile } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { randomUUID } from 'node:crypto';
 import { ReaAdapter } from '../core/rea-adapter.mjs';
@@ -35,6 +35,15 @@ async function readBundle(id) {
 let window, store, active, settingsPath;
 function readSettings() { try { return JSON.parse(readFileSync(settingsPath, 'utf8')); } catch { return {}; } }
 function writeSettings(next) { const merged = { ...readSettings(), ...next }; writeFileSync(settingsPath, JSON.stringify(merged, null, 2), { mode: 0o600 }); return merged; }
+// A macOS GUI app inherits a minimal PATH and no JAVA_HOME, so Ghidra cannot find Java 21. Resolve a
+// JDK (settings override, else /usr/libexec/java_home -v 21) and augment PATH with common tool dirs.
+function resolveJavaHome(settings) {
+  if (settings.javaHome) return settings.javaHome;
+  if (process.platform === 'darwin') {
+    for (const v of ['21', '21+']) { try { const home = execFileSync('/usr/libexec/java_home', ['-v', v], { encoding: 'utf8', timeout: 5000 }).trim(); if (home) return home; } catch {} }
+  }
+  return process.env.JAVA_HOME ?? null;
+}
 // Decompiler-engine locations passed into REA (e.g. GHIDRA_INSTALL_DIR). Only set when configured.
 const reaScript = () => { const require = createRequire(import.meta.url); let s = join(dirname(require.resolve('rea-agents/package.json')), 'scripts', 'rea.mjs'); return s.replace(`app.asar${sep}`, `app.asar.unpacked${sep}`); };
 // Runs REA's own diagnostics for the configured engine. Fixed script path, no shell, bounded.
@@ -43,11 +52,22 @@ function diagnoseEngine() {
     execFile(process.execPath, [reaScript(), 'doctor', '--json'], { timeout: 60000, maxBuffer: 8 * 1024 * 1024, env: { ...process.env, ...engineEnv(), ELECTRON_RUN_AS_NODE: '1' } }, (err, stdout) => {
       let report; try { report = JSON.parse(stdout); } catch { report = null; }
       const ghidra = report?.scope_checks?.find(c => c.name === 'ghidra') ?? report?.providerInspections?.find(p => p.id === 'ghidra');
-      resolve({ ok: Boolean(report), ghidra: ghidra ?? null, checks: report?.scope_checks ?? [], raw: stdout?.slice(0, 20000) ?? String(err?.message ?? 'no output') });
+      resolve({ ok: Boolean(report), ghidra: ghidra ?? null, javaHome: engineEnv().JAVA_HOME ?? null, checks: report?.scope_checks ?? [], raw: stdout?.slice(0, 20000) ?? String(err?.message ?? 'no output') });
     });
   });
 }
-function engineEnv() { const s = readSettings(); const env = {}; if (typeof s.ghidraDir === 'string' && s.ghidraDir) env.GHIDRA_INSTALL_DIR = s.ghidraDir; return env; }
+function engineEnv() {
+  const s = readSettings(); const env = {};
+  if (typeof s.ghidraDir === 'string' && s.ghidraDir) env.GHIDRA_INSTALL_DIR = s.ghidraDir;
+  const javaHome = resolveJavaHome(s);
+  if (javaHome) {
+    env.JAVA_HOME = javaHome;
+    // Put the JDK and the usual package-manager bins on PATH so Ghidra's launcher finds java.
+    const extra = [join(javaHome, 'bin'), '/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin'];
+    env.PATH = [...extra, process.env.PATH ?? ''].filter(Boolean).join(':');
+  }
+  return env;
+}
 function trusted(event) { if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) throw new Error('Untrusted IPC caller'); }
 function handle(name, fn) { ipcMain.handle(name, async (event, ...args) => { trusted(event); return fn(...args); }); }
 // No top-level await before ready: in an ESM main module Electron emits 'ready' only after the
@@ -71,7 +91,7 @@ handle('projects', () => store.list());
 handle('project', id => store.get(id));
 handle('native', async id => { const p = await store.get(id); return p.native ?? { unavailable: 'No native inspection for this analysis.' }; });
 handle('settings', () => readSettings());
-handle('saveSettings', next => { if (!next || typeof next !== 'object') throw new Error('Invalid settings'); const clean = {}; if ('ghidraDir' in next) clean.ghidraDir = typeof next.ghidraDir === 'string' ? next.ghidraDir : ''; return writeSettings(clean); });
+handle('saveSettings', next => { if (!next || typeof next !== 'object') throw new Error('Invalid settings'); const clean = {}; if ('ghidraDir' in next) clean.ghidraDir = typeof next.ghidraDir === 'string' ? next.ghidraDir : ''; if ('javaHome' in next) clean.javaHome = typeof next.javaHome === 'string' ? next.javaHome : ''; return writeSettings(clean); });
 handle('diagnoseEngine', () => diagnoseEngine());
 handle('pickFolder', async () => { const r = await dialog.showOpenDialog(window, { title: 'Select your Ghidra install folder', properties: ['openDirectory'] }); return r.canceled ? null : r.filePaths[0]; });
 handle('licensing', async id => { const p = await store.get(id); return p.licensing ?? { unavailable: p.evidence ? 'This analysis was made before licensing review existed. Analyse the app again.' : 'Needs a completed analysis.' }; });

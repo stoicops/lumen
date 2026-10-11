@@ -136,3 +136,8 @@ User reported "all works" after pulling the map, security and checked-answer cha
 ## Fix: engage Ghidra via provider_id
 
 - Root cause of "engine ready but not triggering": open_binary only loads a decompiler when provider_id is named; we omitted it, so binary_overview had no provider. Now inspectNative passes provider_id (ghidra) when GHIDRA_INSTALL_DIR is set, with a 20-min timeout for Ghidra import, a progress message, and a fallback to identification if the engine open fails (so the user still sees format + the engine error). Confirmed from rea-agents source (registerSessionTools: session.open providerId). Deep path still unverified here (no Ghidra); no-provider path re-verified (opened true, engineReady false).
+
+## Fix: Ghidra needs JAVA_HOME (macOS GUI PATH)
+
+- Root cause of "engine ready but still provider_unavailable": REA/Ghidra reads JAVA_HOME (confirmed in rea-agents GhidraInstallation/GhidraDoctor), but a macOS GUI-launched Electron app inherits a minimal PATH and no JAVA_HOME, so Ghidra cannot launch Java 21. rea doctor reported the folder OK without exercising a real Java launch.
+- Fix: engineEnv() now resolves JAVA_HOME (settings override, else /usr/libexec/java_home -v 21 on macOS) and augments PATH (JDK bin + /opt/homebrew/bin + /usr/local/bin + existing) for the REA subprocess and the doctor. Settings adds an optional Java 21 home field; Check engine shows the resolved Java. Unverified here (no macOS/Java/Ghidra); verify on the user Mac.
