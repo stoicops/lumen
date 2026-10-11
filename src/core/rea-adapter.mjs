@@ -24,13 +24,15 @@ export class ReaAdapter {
   constructor({ launch, connectTimeoutMs = CONNECT_TIMEOUT_MS } = {}) { this.launch = launch; this.connectTimeoutMs = connectTimeoutMs; this.pid = null; }
   defaultLaunch() {
     // Electron launches this with ELECTRON_RUN_AS_NODE; no shell, npx or downloads.
+    // ELECTRON_NO_ASAR (set at spawn) stops Electron's fs from presenting .asar targets as
+    // virtual folders, which made REA report ENOENT for real .asar files.
     const script = join(dirname(require.resolve('rea-agents/package.json')), 'scripts/rea.mjs');
     return { command: process.execPath, args: [script, 'mcp'] };
   }
   async connect({ signal } = {}) {
     const { command, args } = this.launch ?? this.defaultLaunch();
     this.client = new Client({ name: 'lumen-local-studio', version: '0.1.0' });
-    this.transport = new StdioClientTransport({ command, args, env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, stderr: 'pipe' });
+    this.transport = new StdioClientTransport({ command, args, env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', ELECTRON_NO_ASAR: '1' }, stderr: 'pipe' });
     // Consume stderr without persisting potentially sensitive target paths.
     this.transport.stderr?.on('data', () => {});
     const handshake = (async () => {

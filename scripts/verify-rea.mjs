@@ -6,7 +6,8 @@ import { ReaAdapter } from '../src/core/rea-adapter.mjs';
 const adapter = new ReaAdapter();
 try {
   await adapter.connect();
-  const result = await adapter.analyze(resolve('fixtures/simple-app'));
+  const target = resolve(process.argv[2] ?? 'fixtures/simple-app');
+  const result = await adapter.analyze(target);
   assert(result.evidence_id, 'Canonical evidence identity missing');
   assert(result.normalized_result, 'Normalized result missing');
   const directory = await mkdtemp(join(tmpdir(), 'lumen-evidence-'));

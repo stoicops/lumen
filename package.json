@@ -2,7 +2,7 @@
   "name": "lumen-local-studio", "version": "0.1.0", "private": true, "type": "module",
   "description": "A local evidence-first desktop companion for REA",
   "main": "src/desktop/main.mjs", "engines": {"node": ">=24.11.0"},
-  "scripts": {"build": "node scripts/build.mjs", "start": "npm run build && electron .", "test": "node --test tests/*.test.mjs", "verify:rea": "node scripts/verify-rea.mjs"},
+  "scripts": {"build": "node scripts/build.mjs", "start": "npm run build && electron .", "test": "node --test tests/*.test.mjs", "verify:rea": "node scripts/verify-rea.mjs && node scripts/verify-rea.mjs fixtures/simple-app.asar", "verify:rea:electron": "ELECTRON_RUN_AS_NODE=1 electron scripts/verify-rea.mjs fixtures/simple-app.asar"},
   "dependencies": {"@modelcontextprotocol/client": "2.3.1", "rea-agents": "6.4.0", "react": "19.2.0", "react-dom": "19.2.0"},
   "devDependencies": {"electron": "40.0.0", "esbuild": "0.25.12"}
 }

@@ -49,3 +49,9 @@ Fix: descendant listing on macOS/other POSIX now uses the system process table (
 
 Cause: top-level `await app.whenReady()` in the ESM main module deadlocks — Electron emits 'ready' only after the module finishes evaluating. Fix: start() is called from app.whenReady().then(...); startup errors show a dialog and exit.
 Reproduced in container with Electron 40.0.0 under Xvfb + remote debugging: original main → no page after 12 s; fixed main → page "Lumen Local Studio" loaded from dist/index.html. Awaiting confirmation on the user's Mac.
+
+## .asar targets failed in the desktop app (user's Mac: ENOENT for an existing .asar)
+
+User confirmed: window opens on macOS after the startup fix; Ollama model discovery listed gemma2:2b.
+Cause: REA runs under Electron's binary (ELECTRON_RUN_AS_NODE); Electron's fs presents .asar files as virtual folders, so REA saw ENOENT. Plain-Node verify only covered a folder target.
+Fix: spawn REA with ELECTRON_NO_ASAR=1. Added fixtures/simple-app.asar; `npm run verify:rea` now checks folder + asar, and `npm run verify:rea:electron` runs the asar case under Electron. Container: reproduced ENOENT under Electron, then PASS with cleanup verified after the fix. Awaiting Mac rerun.
