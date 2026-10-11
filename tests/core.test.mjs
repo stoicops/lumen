@@ -7,7 +7,7 @@ import http from 'node:http';
 import { localEndpoint, askEvidence } from '../src/core/local-model.mjs';
 import { ProjectStore } from '../src/core/projects.mjs';
 import { ReaAdapter, CancelledError } from '../src/core/rea-adapter.mjs';
-import { alive, descendants } from '../src/core/process-cleanup.mjs';
+import { alive, descendants, terminateTree } from '../src/core/process-cleanup.mjs';
 test('local-only endpoint policy rejects cloud, aliases, credentials and unsafe schemes', () => {
   for(const url of ['https://api.example.com/v1','http://localhost:1234/v1','http://127.0.0.1.example.com/v1','file:///etc/passwd','http://user:pass@127.0.0.1/v1','http://127.0.0.1/v1?route=cloud'])assert.throws(()=>localEndpoint(url));
   assert.equal(localEndpoint('http://127.0.0.1:1234/v1/'),'http://127.0.0.1:1234/v1');
@@ -46,4 +46,16 @@ test('connect timeout is bounded',async()=>{
   const adapter=new ReaAdapter({launch:{command:process.execPath,args:[fixture]},connectTimeoutMs:300});
   await assert.rejects(adapter.connect(),/timed out/);
   assert.equal((await adapter.close()).survivors.length,0);
+});
+test('ps-based descendant listing (macOS path) finds the engine child tree',async t=>{
+  if(process.platform==='win32')return t.skip('no ps');
+  const {spawn}=await import('node:child_process');
+  const fixture=new URL('./fixtures/stubborn-engine.mjs',import.meta.url).pathname;
+  const engine=spawn(process.execPath,[fixture],{stdio:['pipe','ignore','pipe']});
+  const grandchild=await new Promise(r=>engine.stderr.on('data',d=>{const m=/grandchild (\d+)/.exec(String(d));if(m)r(Number(m[1]));}));
+  const viaPs=await descendants(engine.pid,{method:'ps'});
+  assert.ok(viaPs.includes(grandchild),'ps listing includes the grandchild');
+  const cleanup=await terminateTree(engine.pid,{gracefulMs:200,snapshot:viaPs});
+  assert.equal(cleanup.verified,true);assert.equal(alive(grandchild),false);
+  assert.equal(await descendants(999999999,{method:'ps'}),null,'unknown engine PID is "not enumerable", never "no children"');
 });

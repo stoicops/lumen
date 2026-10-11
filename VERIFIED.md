@@ -34,3 +34,11 @@ Environment: hosted Linux container, Node v24.11.1, npm ci --ignore-scripts from
 | Electron GUI, cancel/quit wiring in main.mjs | Syntax-checked only; not exercised in a running Electron app. |
 
 Limits: descendant enumeration uses /proc and is Linux-only. On macOS/Windows the cleanup record reports `verified: false` with the reason "descendants not enumerable" even when the engine itself exited. Descendants that detach into a new session after the snapshot are not tracked.
+
+## Update — user's Mac (MacBook Pro), 11 October 2026
+
+| Check | Outcome |
+|---|---|
+| npm run verify:rea | **Real analysis + bundle export PASSED on macOS.** Cleanup reported unverified: REA exited gracefully with no survivors, but descendants were not enumerable on macOS. |
+
+Fix: descendant listing on macOS/other POSIX now uses the system process table (`/bin/ps -A -o pid=,ppid=`, fixed path, no shell, bounded), and the snapshot is taken before asking the engine to close. The ps path is unit-tested on Linux (7/7 pass); awaiting a macOS rerun. Windows remains "not enumerable" → unverified.

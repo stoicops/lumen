@@ -6,7 +6,7 @@ Read docs/REQUIREMENTS.md, docs/UPSTREAM-NOTES.md and README.md first. User: Sur
 
 1. Use Node 24.11+ (tested Node 24.19.0). Run npm ci, npm test, npm run build, npm run verify:rea.
 2. For Electron development, normal npm ci runs its install script. If installed using --ignore-scripts, run node node_modules/electron/install.js before npm start.
-3. Validate desktop startup on the user's Mac. This environment verified build/core plus the real REA handshake, discovery and binary_session call. Real analysis is BLOCKED by REA process-ownership inspection: this container’s ps did not report the REA process. No graphical Electron window or real LM Studio/Ollama connection was tested. Do not bypass the ownership guard; rerun on the user’s Mac.
+3. Validate desktop startup on the user's Mac. This environment verified build/core plus the real REA handshake, discovery and binary_session call. Real analysis has since PASSED both in a later container and on the user's Mac (see VERIFIED.md). No graphical Electron window or real LM Studio/Ollama connection was tested. Do not bypass the ownership guard; rerun on the user’s Mac.
 4. Fix lifecycle/security issues before expanding targets; then build the evidence-driven map and beginner summary. Work through M1 acceptance criteria; never claim the starter is production-ready.
 
 ## Implemented
@@ -22,7 +22,7 @@ Read docs/REQUIREMENTS.md, docs/UPSTREAM-NOTES.md and README.md first. User: Sur
 
 ## Material limitations / next actions in order
 
-1. DONE (core, see VERIFIED.md): bounded/abortable connect, owned PID tracking, verified process-tree cleanup (src/core/process-cleanup.mjs), `cancelling` persisted until cleanup confirmed, quit waits up to 15 s. REMAINING: descendant enumeration on macOS/Windows (currently reported as unverified); exercise cancel/quit in a running Electron app on the user's Mac.
+1. DONE (core, see VERIFIED.md): bounded/abortable connect, owned PID tracking, verified process-tree cleanup (src/core/process-cleanup.mjs), `cancelling` persisted until cleanup confirmed, quit waits up to 15 s. macOS descendant listing via /bin/ps added (awaiting Mac rerun). REMAINING: Windows enumeration; exercise cancel/quit in a running Electron app on the user's Mac.
 2. Only atomic JSON metadata is durable, not a full persistent queue. Replace with SQLite transactions/migrations when adding multiple jobs. Persist progress events and completion timestamps. Handle corrupt records visibly; current list skips them.
 3. The UI shows engine summary JSON, not a visual architecture map or a friendly findings list. Build projections from actual bundle schema with fixtures. Preserve parent_evidence_id, provenance and limitations. Never fabricate graph nodes or evidence confidence.
 4. Chat is single-turn, non-streaming and summary-only. Add bounded context retrieval, streaming/cancel, conversations and citation validation. Label model references as unverified until resolved against retained facts. AI prompt instructions alone do not guarantee grounding.

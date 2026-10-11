@@ -2,7 +2,7 @@ import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
-import { terminateTree } from './process-cleanup.mjs';
+import { terminateTree, snapshotTree } from './process-cleanup.mjs';
 const require = createRequire(import.meta.url);
 const ALLOWED = new Set(['binary_session', 'analyze_javascript_application', 'inspect_analysis_view', 'get_evidence_bundle', 'export_evidence_bundle']);
 export const CONNECT_TIMEOUT_MS = 60000;
@@ -55,9 +55,10 @@ export class ReaAdapter {
   // Returns a cleanup record; `verified` is true only when the owned process and every enumerated descendant are gone.
   async close() {
     const pid = this.pid ?? this.transport?.pid ?? null;
+    const snapshot = await snapshotTree(pid);
     // Start the SDK close (stdin EOF) but never trust it alone: it does not await exit after SIGKILL.
     const sdkClose = this.client?.close().catch(() => {});
-    const cleanup = await terminateTree(pid, { gracefulMs: 2000 });
+    const cleanup = await terminateTree(pid, { gracefulMs: 2000, snapshot });
     await Promise.race([sdkClose, new Promise(r => setTimeout(r, 500).unref())]);
     return cleanup;
   }
