@@ -89,3 +89,7 @@ Observed problems: (a) answer shows raw markdown (`**`) because output is render
 - Real Electron + fake OpenAI-compatible server on 127.0.0.1:11434: planted answer scored "4 of 7 claims cite real evidence. 1 has no source. 1 cites a fact that doesn't exist. 1 has a number that doesn't match." docs/screenshots/8-checked-answer.png. Not yet run against a real model on the Mac.
 - npm test: 15 passed (adds syntax check of main/preload after a slip broke the main file during this change; caught by the Electron run before commit).
 - Limits: checking is mechanical; a cited claim can still misread its fact. Still single-turn, non-streaming, conversations not saved.
+
+## User confirmation on macOS (11 October 2026)
+
+User reported "all works" after pulling the map, security and checked-answer changes: Map, Security tab and grounded AI answers working on the Mac with a local Ollama model. Cancel/Cmd+Q mid-analysis not separately reported.
