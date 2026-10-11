@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld('studio', Object.freeze({
   pickFolder: () => ipcRenderer.invoke('pickFolder'),
   diagnoseEngine: () => ipcRenderer.invoke('diagnoseEngine'),
   prepareGhidra: () => ipcRenderer.invoke('prepareGhidra'),
+  decompile: id => ipcRenderer.invoke('decompile', id),
+  cancelDecompile: () => ipcRenderer.invoke('cancelDecompile'),
   remove: id => ipcRenderer.invoke('delete', id),
   architecture: id => ipcRenderer.invoke('map', id),
   security: id => ipcRenderer.invoke('security', id),

@@ -134,6 +134,28 @@ async function securityFor(id) {
   return { ...reviewSecurity({ bundle, summary: project.evidence, secrets: project.secrets?.error ? null : project.secrets }), scanError: project.secrets?.error ?? null, scanned: Boolean(project.secrets) };
 }
 handle('security', securityFor);
+// On-demand deep decompilation: launched only when the user explicitly asks, never on drop. Runs the
+// Ghidra engine in its own bounded session with the memory guard, and stores the result on the project.
+let decompiling = null;
+handle('decompile', async id => {
+  if (decompiling) throw new Error('A decompilation is already running');
+  const project = await store.get(id);
+  const target = project.analysisTarget || project.target;
+  if (!engineEnv().GHIDRA_INSTALL_DIR) throw new Error('Set a Ghidra folder in Settings first');
+  const need = (parseInt(engineEnv().GHIDRA_HEADLESS_MAXMEM) || 1) + 1.5;
+  const free = freemem() / 1073741824;
+  if (free < need) return { skipped: `Only about ${free.toFixed(1)} GB free; Ghidra needs ~${need.toFixed(1)} GB. Close other apps (and unload your local AI model), or lower the Ghidra memory limit in Settings.` };
+  const adapter = new ReaAdapter({ extraEnv: engineEnv() }); const controller = new AbortController();
+  decompiling = { adapter, controller };
+  try {
+    await adapter.connect({ signal: controller.signal });
+    const native = await adapter.inspectNative(target, { signal: controller.signal, providerId: 'ghidra' });
+    native.engineConfigured = true;
+    const full = await store.get(id); full.native = native; await store.save(full);
+    return native;
+  } finally { try { await adapter.close(); } catch {} decompiling = null; }
+});
+handle('cancelDecompile', () => { decompiling?.controller.abort(); return Boolean(decompiling); });
 handle('platform', () => process.platform);
 handle('delete', async id => {
   if (typeof id !== 'string') throw new Error('Invalid project');
@@ -191,10 +213,13 @@ handle('analyze', async path => {
       progress({ message: 'Looking at how licensing is enforced' });
       project.licensing = await scanWithoutAsarShim(analyzeLicensing, analysisTarget, controller.signal).catch(error => { if (controller.signal.aborted) throw error; return { error: String(error.message ?? error) }; });
     } else {
-      // Native / managed / android: identify and inspect. Deep decompilation needs an installed engine.
+      // Native / managed / android: identification only on drop (instant, safe). Deep decompilation is
+      // heavy (a Ghidra JVM) and is launched explicitly later via the 'decompile' action, never on drop.
       progress({ message: `Inspecting ${KINDS[project.kind]?.label ?? 'binary'}` });
       project.native = await adapter.inspectNative(analysisTarget, { signal: controller.signal });
       project.native.engineConfigured = Boolean(engineEnv().GHIDRA_INSTALL_DIR);
+      project.native.engineAvailable = Boolean(engineEnv().GHIDRA_INSTALL_DIR); // offer the on-demand button
+      project.analysisTarget = analysisTarget;
     }
     outcome = controller.signal.aborted ? 'cancelled' : 'completed';
   } catch (error) { outcome = controller.signal.aborted ? 'cancelled' : 'failed'; if (outcome === 'failed') project.error = String(error.message ?? error); }

@@ -159,3 +159,9 @@ User reported "all works" after pulling the map, security and checked-answer cha
 ## Whole-Mac blank = system memory pressure — guard before launching Ghidra
 
 - User reported the WHOLE screen blanking (not just the window): system RAM exhaustion from Ghidra JVM + loaded Ollama model + Electron. Mitigations: default GHIDRA_HEADLESS_MAXMEM lowered 2G→1G; pre-flight check skips the engine (identification only) when free RAM < heap+1.5 GB, with an on-screen explanation (project.engineSkipped) instead of freezing the machine. Guidance: close apps / unload the local model before native decompile. Cannot fully prevent an OS-level freeze from the app; this keeps Lumen from being the trigger.
+
+## Deep decompilation is now explicit, never on drop (16GB Mac still blanked)
+
+- 16 GB + 1 GB heap rules out simple RAM exhaustion; whole-screen blank the instant the Ghidra JVM starts is a macOS GPU/WindowServer event under sudden load, outside app control. REA already launches Ghidra headless (-Djava.awt.headless=true).
+- Change: native drop does identification only. Ghidra runs only via an explicit "Decompile with Ghidra" button (on-demand `decompile` IPC, own bounded session, memory guard, Stop). Nothing heavy launches automatically, so a drop can no longer freeze the machine.
+- Next diagnostic for the user: run analyzeHeadless directly in Terminal to isolate whether Ghidra alone (outside Lumen) blanks the screen.
