@@ -141,3 +141,8 @@ User reported "all works" after pulling the map, security and checked-answer cha
 
 - Root cause of "engine ready but still provider_unavailable": REA/Ghidra reads JAVA_HOME (confirmed in rea-agents GhidraInstallation/GhidraDoctor), but a macOS GUI-launched Electron app inherits a minimal PATH and no JAVA_HOME, so Ghidra cannot launch Java 21. rea doctor reported the folder OK without exercising a real Java launch.
 - Fix: engineEnv() now resolves JAVA_HOME (settings override, else /usr/libexec/java_home -v 21 on macOS) and augments PATH (JDK bin + /opt/homebrew/bin + /usr/local/bin + existing) for the REA subprocess and the doctor. Settings adds an optional Java 21 home field; Check engine shows the resolved Java. Unverified here (no macOS/Java/Ghidra); verify on the user Mac.
+
+## Fix: normalize GHIDRA_INSTALL_DIR (user pointed one level too deep)
+
+- User diagnostics: Java 21 OK, platform OK; only failing check ghidra-installation "executable_missing" because GHIDRA_INSTALL_DIR was /…/ghidra_12.1.4_PUBLIC/Ghidra (the inner Ghidra/) instead of the release root /…/ghidra_12.1.4_PUBLIC.
+- Fix: normalizeGhidraDir() accepts the root, the inner Ghidra/ (→ parent), or a parent containing a ghidra_* release (→ descend), keying off Ghidra/application.properties. Unit-checked with a simulated layout. This was the whole blocker; Java/platform were fine.

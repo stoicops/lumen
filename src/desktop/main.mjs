@@ -1,9 +1,9 @@
 import { app, BrowserWindow, ipcMain, dialog, session, clipboard } from 'electron';
 import { homedir } from 'node:os';
-import { dirname, join, resolve, sep } from 'node:path';
+import { dirname, join, resolve, sep, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { realpath, stat, writeFile, copyFile, readFile } from 'node:fs/promises';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
 import { execFile, execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { randomUUID } from 'node:crypto';
@@ -56,9 +56,20 @@ function diagnoseEngine() {
     });
   });
 }
+// GHIDRA_INSTALL_DIR must be the release root (the folder containing Ghidra/application.properties).
+// People commonly pick one level too deep (the inner Ghidra/) or one too shallow (the Downloads parent);
+// normalise both so a reasonable pick just works.
+function normalizeGhidraDir(dir) {
+  const isRoot = d => { try { return existsSync(join(d, 'Ghidra', 'application.properties')); } catch { return false; } };
+  if (!dir) return dir;
+  if (isRoot(dir)) return dir;
+  if (basename(dir) === 'Ghidra' && isRoot(dirname(dir))) return dirname(dir);     // pointed at inner Ghidra/
+  try { for (const name of readdirSync(dir)) if (/ghidra/i.test(name) && isRoot(join(dir, name))) return join(dir, name); } catch {} // pointed at parent
+  return dir; // leave as-is; diagnostics will report the problem
+}
 function engineEnv() {
   const s = readSettings(); const env = {};
-  if (typeof s.ghidraDir === 'string' && s.ghidraDir) env.GHIDRA_INSTALL_DIR = s.ghidraDir;
+  if (typeof s.ghidraDir === 'string' && s.ghidraDir) env.GHIDRA_INSTALL_DIR = normalizeGhidraDir(s.ghidraDir);
   const javaHome = resolveJavaHome(s);
   if (javaHome) {
     env.JAVA_HOME = javaHome;
