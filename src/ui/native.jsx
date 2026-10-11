@@ -6,7 +6,11 @@ export function NativeView({ project, platform, onOpenSettings }) {
   const isMac = platform === 'darwin';
   const [data, setData] = useState(null), [error, setError] = useState(''), [diag, setDiag] = useState(null), [fixing, setFixing] = useState(''), [fixed, setFixed] = useState(null);
   const [running, setRunning] = useState(false), [runNote, setRunNote] = useState('');
-  useEffect(() => { setData(null); setError(''); setDiag(null); setFixed(null); setRunNote(''); window.studio.native(project.id).then(setData).catch(e => setError(e.message)); }, [project.id]);
+  // Whether Ghidra is configured RIGHT NOW (live), not when this file was first imported. The per-project
+  // native.engineConfigured flag is a snapshot from drop time, so configuring Ghidra afterwards never
+  // enabled the button. Read the live settings instead.
+  const [engineLive, setEngineLive] = useState(false);
+  useEffect(() => { setData(null); setError(''); setDiag(null); setFixed(null); setRunNote(''); window.studio.native(project.id).then(setData).catch(e => setError(e.message)); window.studio.settings().then(s => setEngineLive(Boolean(s?.ghidraDir))).catch(() => {}); }, [project.id]);
   const fixPerms = async () => { setFixing('working'); try { const r = await window.studio.prepareGhidra(); setFixed(r); setDiag(await window.studio.diagnoseEngine()); } catch (e) { setFixed({ ok: false, message: e.message }); } finally { setFixing('done'); } };
   const [progress, setProgress] = useState('');
   useEffect(() => window.studio.onDecompileProgress(p => setProgress(p.message)), []);
@@ -15,7 +19,7 @@ export function NativeView({ project, platform, onOpenSettings }) {
     try { const r = await window.studio.decompile(project.id); if (r.skipped) setRunNote(r.skipped); else setData(r); }
     catch (e) { setError(e.message); } finally { setRunning(false); setProgress(''); }
   };
-  const canDecompile = data && data.opened && !data.engineReady && project.native?.engineConfigured;
+  const canDecompile = data && data.opened && !data.engineReady && (engineLive || project.native?.engineConfigured);
   // Self-driving: once we know Ghidra is configured and the file is open but not yet decompiled, start it
   // automatically — the user asked not to hunt for a button. The main process still runs the memory guard,
   // so if RAM is tight it returns a skip note instead of launching and freezing the machine. Runs once per
@@ -59,7 +63,7 @@ export function NativeView({ project, platform, onOpenSettings }) {
         </ol>
         <button className="btn primary" onClick={onOpenSettings}>Open Settings</button>
       </>}
-      {project.native?.engineConfigured && (data.engineMessage || diag) && <div className="inline-error" style={{ marginTop: 10 }}>
+      {(engineLive || project.native?.engineConfigured) && (data.engineMessage || diag) && <div className="inline-error" style={{ marginTop: 10 }}>
         <p>An engine folder is set, but the decompile did not run.</p>
         {data.engineMessage && <p><strong>Engine said:</strong> {data.engineMessage}</p>}
         {diag ? <>
