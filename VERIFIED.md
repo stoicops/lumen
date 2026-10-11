@@ -75,3 +75,10 @@ Observed problems: (a) answer shows raw markdown (`**`) because output is render
 - src/core/graph.mjs projects REA's JavaScriptApplicationGraph from the saved bundle: only REA nodes; file-level nodes (artifact/asar-entry/asset/module) folded into the architecture node REA maps them to; every link lists its REA edge IDs and weakest state/confidence. Test asserts no invented nodes/links against a real bundle fixture.
 - simple-app.asar: 8 parts, 9 links (17 file-level nodes folded, 33 raw edges); 3 animated data links: preload→channel, handler←channel, preload→exposed API. Pulse disabled under prefers-reduced-motion; Pause button.
 - npm test: 11 passed. Screenshots docs/screenshots/5,6.
+
+## Security checks and key scan
+
+- src/core/security.mjs: Electron window settings (literal/computed/absent with Electron default noted), exposed page APIs (general-purpose members flagged), IPC handlers with no sender checks, dynamic channels, native add-ons — all from REA facts, each citing evidence/node/location.
+- src/core/secret-scan.mjs: Lumen's own read-only pattern scan (folders + raw .asar parsing; no symlinks, bounded files/bytes/header, out-of-archive offsets rejected, masked values only). Runs after export during analysis; inside Electron it reads with process.noAsar.
+- Tests: 13 passed (keys built at runtime, never committed; malformed .asar rejected).
+- Real Electron (Xvfb): planted AWS-format key in an .asar found at main.js:6, displayed masked; unchecked IPC handler flagged. docs/screenshots/7-security.png.

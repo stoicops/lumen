@@ -26,7 +26,7 @@ export class ProjectStore {
 }
 // Markdown handoff designed to paste into Claude or another assistant. Built from the same projection
 // as the UI so it never states more than the evidence; home-folder paths are shortened to ~.
-export function report(project, { home } = {}) {
+export function report(project, { home, security } = {}) {
   const redact = text => (home && typeof text === 'string' ? text.split(home).join('~') : text);
   const view = describeEvidence(project.evidence);
   const out = [
@@ -48,6 +48,8 @@ export function report(project, { home } = {}) {
     '| Area | Status | Links found | Unknowns |', '|---|---|---|---|', ...view.coverage.families.map(f => `| ${f.name} | ${f.status} | ${f.relations} | ${f.unknowns} |`),
     '', '## Limitations', '', ...view.limitations.map(l => `- ${l}`),
     '', '## Unknowns', '', ...view.unknowns.map(l => `- ${l}`),
+    ...(security ? ['', '## Security checks', '', 'From REA facts and Lumen\'s read-only key scan. Things to review, not proof of a vulnerability. Keys are masked.', '',
+      ...security.findings.filter(f => f.severity !== 'pass').map(f => `- **${f.severity}** ${f.title}: ${f.detail}${f.location?.path ? ` (${f.location.path}${f.location.line ? ':' + f.location.line : ''})` : ''}`)] : []),
     '', '## Note for an AI assistant reading this', '', 'Answer only from the facts above and cite the field paths. Say "unknown" when the evidence does not cover something. Do not treat the coverage area names as features of the app.', '');
   return redact(out.join('\n'));
 }

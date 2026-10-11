@@ -6,9 +6,23 @@ import { realpath, stat, writeFile, copyFile, readFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto';
 import { ReaAdapter } from '../core/rea-adapter.mjs';
 import { projectArchitecture } from '../core/graph.mjs';
+import { reviewSecurity } from '../core/security.mjs';
+import { scanTarget } from '../core/secret-scan.mjs';
 import { ProjectStore, report } from '../core/projects.mjs';
 import { discoverModels, askEvidence } from '../core/local-model.mjs';
 const here = dirname(fileURLToPath(import.meta.url));
+// Electron's fs treats .asar files as folders; the key scan must read the raw archive bytes.
+async function scanWithoutAsarShim(target, signal) {
+  const previous = process.noAsar; process.noAsar = true;
+  try { return await scanTarget(target, { signal }); } finally { process.noAsar = previous; }
+}
+async function readBundle(id) {
+  const file = join(store.path(id), 'evidence.json');
+  let info; try { info = await stat(file); } catch { return { unavailable: 'No saved evidence bundle for this analysis.' }; }
+  // Bounded read: the full bundle stays on disk; only projections cross IPC.
+  if (info.size > 64 * 1024 * 1024) return { unavailable: `Evidence bundle is ${Math.round(info.size / 1048576)} MB; views are limited to 64 MB.` };
+  return { bundle: JSON.parse(await readFile(file, 'utf8')) };
+}
 let window, store, active;
 function trusted(event) { if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) throw new Error('Untrusted IPC caller'); }
 function handle(name, fn) { ipcMain.handle(name, async (event, ...args) => { trusted(event); return fn(...args); }); }
@@ -29,15 +43,16 @@ window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 window.webContents.on('will-navigate', event => event.preventDefault());
 handle('choose', async () => { const result = await dialog.showOpenDialog(window, { title: 'Select JavaScript app folder or ASAR', properties: ['openFile', 'openDirectory'] }); return result.canceled ? null : result.filePaths[0]; });
 handle('projects', () => store.list());
-handle('copyMarkdown', async id => { clipboard.writeText(report(await store.get(id), { home: homedir() })); return true; });
+handle('copyMarkdown', async id => { const project = await store.get(id); clipboard.writeText(report(project, { home: homedir(), security: project.evidence ? await securityFor(id) : null })); return true; });
 handle('map', async id => {
-  const file = join(store.path(id), 'evidence.json');
-  let info; try { info = await stat(file); } catch { return { unavailable: 'No saved evidence bundle for this analysis.' }; }
-  // Bounded read: the full bundle stays on disk; only the projected map crosses IPC.
-  if (info.size > 64 * 1024 * 1024) return { unavailable: `Evidence bundle is ${Math.round(info.size / 1048576)} MB; map view is limited to 64 MB.` };
-  const map = projectArchitecture(JSON.parse(await readFile(file, 'utf8')));
-  return map ?? { unavailable: 'This evidence has no application graph to draw.' };
+  const { bundle, unavailable } = await readBundle(id); if (unavailable) return { unavailable };
+  return projectArchitecture(bundle) ?? { unavailable: 'This evidence has no application graph to draw.' };
 });
+async function securityFor(id) {
+  const project = await store.get(id); const { bundle } = await readBundle(id);
+  return { ...reviewSecurity({ bundle, summary: project.evidence, secrets: project.secrets?.error ? null : project.secrets }), scanError: project.secrets?.error ?? null, scanned: Boolean(project.secrets) };
+}
+handle('security', securityFor);
 handle('platform', () => process.platform);
 handle('delete', async id => {
   if (typeof id !== 'string') throw new Error('Invalid project');
@@ -73,6 +88,11 @@ handle('analyze', async path => {
     if (controller.signal.aborted) throw new Error('Cancelled before export');
     progress({ message: 'Saving complete evidence bundle' });
     await adapter.export(join(store.path(project.id), 'evidence.json'), { signal: controller.signal });
+    progress({ message: 'Checking the files for exposed keys' });
+    project.secrets = await scanWithoutAsarShim(target, controller.signal).catch(error => {
+      if (controller.signal.aborted) throw error;
+      return { error: String(error.message ?? error) };
+    });
     outcome = controller.signal.aborted ? 'cancelled' : 'completed';
   } catch (error) { outcome = controller.signal.aborted ? 'cancelled' : 'failed'; if (outcome === 'failed') project.error = String(error.message ?? error); }
   finally {
@@ -81,7 +101,7 @@ handle('analyze', async path => {
     if (!project.cleanup.verified) project.cleanupWarning = `Engine cleanup not confirmed: ${project.cleanup.reason ?? 'unknown'}. Check for leftover REA processes before retrying.`;
     // A cancellation is only reported as `cancelled` once the engine is confirmed stopped.
     project.status = outcome === 'cancelled' && !project.cleanup.verified ? 'cancelling' : outcome;
-    if (outcome === 'cancelled') project.evidence = undefined; // never expose a partial result after cancel
+    if (outcome === 'cancelled') { project.evidence = undefined; project.secrets = undefined; } // never expose a partial result after cancel
     project.finishedAt = new Date().toISOString();
     active = null; await store.save(project); finished();
   }
@@ -97,7 +117,7 @@ handle('export', async id => {
   const project = await store.get(id);
   const result = await dialog.showSaveDialog(window, { defaultPath: `${project.name.replace(/[^a-z0-9_-]/gi, '_')}-lumen.md`, filters: [{ name: 'Markdown report', extensions: ['md'] }] });
   if (result.canceled) return false;
-  await writeFile(result.filePath, report(project, { home: homedir() }), 'utf8');
+  await writeFile(result.filePath, report(project, { home: homedir(), security: project.evidence ? await securityFor(id) : null }), 'utf8');
   if (project.status === 'completed') await copyFile(join(store.path(id), 'evidence.json'), `${result.filePath}.${randomUUID()}.evidence.json`);
   return true;
 });

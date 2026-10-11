@@ -108,3 +108,50 @@ test('architecture map never invents nodes or links and keeps REA provenance',as
   const l=layout(map);for(const n of map.nodes)assert.ok(l.positions[n.id]);
   assert.equal(projectArchitecture({records:[]}),null);
 });
+test('key scan finds and masks credentials in folders and .asar archives, read-only and bounded',async()=>{
+  const {scanDirectory,scanAsar,mask}=await import('../src/core/secret-scan.mjs');
+  const {writeFile,mkdir,symlink}=await import('node:fs/promises');
+  const aws='AKIA'+'Z7Q2B4N6P8R0T3V5', google='AIza'+'Sy'+'A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q';
+  const files={'main.js':`const k="${aws}";\nfetch("https://api.example-service.io/v1");`,'config.json':`{"apiKey": "${google}", "password": "xxxxxxxx"}`,'img.png':aws};
+  const dir=await mkdtemp(join(tmpdir(),'lumen-leak-'));for(const[n,c]of Object.entries(files))await writeFile(join(dir,n),c);
+  await symlink('/etc/passwd',join(dir,'link.js')).catch(()=>{});
+  const r=await scanDirectory(dir);
+  assert.deepEqual(r.hits.map(h=>h.kind).sort(),['AWS access key','Google API key']);
+  const a=r.hits.find(h=>h.kind==='AWS access key');assert.equal(a.file,'main.js');assert.equal(a.line,1);assert.equal(a.masked,mask(aws));
+  assert.ok(!JSON.stringify(r).includes(aws)&&!JSON.stringify(r).includes(google),'full secrets never kept');
+  assert.ok(r.hosts.includes('api.example-service.io'));
+  if(process.platform!=='win32')assert.ok(r.skipped.some(s=>s.includes('symlink')));
+  // Build a real .asar: [4][headerPickleSize][payload][jsonLen][json][pad] then file data.
+  const bodies=Object.entries(files).map(([n,c])=>[n,Buffer.from(c)]);let offset=0;const tree={files:{}};
+  for(const[n,b]of bodies){tree.files[n]={size:b.length,offset:String(offset)};offset+=b.length;}
+  tree.files['evil']={size:10,offset:String(10**9)};
+  const json=Buffer.from(JSON.stringify(tree));const padded=Math.ceil(json.length/4)*4;
+  const head=Buffer.alloc(16+padded);head.writeUInt32LE(4,0);head.writeUInt32LE(8+padded,4);head.writeUInt32LE(4+padded,8);head.writeUInt32LE(json.length,12);json.copy(head,16);
+  const asar=join(dir,'app.asar');await writeFile(asar,Buffer.concat([head,...bodies.map(b=>b[1])]));
+  const ra=await scanAsar(asar);
+  assert.deepEqual(ra.hits.map(h=>h.kind).sort(),['AWS access key','Google API key']);
+  await writeFile(join(dir,'bad.asar'),Buffer.from([4,0,0,0,255,255,255,255,0,0,0,0,255,255,255,255]));
+  await assert.rejects(scanAsar(join(dir,'bad.asar')),/malformed|too large/);
+});
+test('security review flags risky window settings and unchecked IPC from REA facts, with citations',async()=>{
+  const {reviewSecurity}=await import('../src/core/security.mjs');
+  const fs=await import('node:fs/promises');
+  const bundle=JSON.parse(await fs.readFile(new URL('./fixtures/simple-app-bundle.json',import.meta.url)));
+  const summary=JSON.parse(await fs.readFile(new URL('./fixtures/summary-evidence.json',import.meta.url)));
+  const r=reviewSecurity({bundle,summary});
+  const t=r.findings.map(f=>`${f.severity}:${f.title}`);
+  assert.ok(t.includes('pass:contextIsolation is true'));
+  assert.ok(t.includes('medium:Message handlers do not check who sent the message'));
+  assert.ok(t.some(x=>x.startsWith('info:Functions the web page can call: greetings')));
+  assert.equal(r.counts.high,0);
+  for(const f of r.findings)assert.ok(f.evidenceId,'every REA finding cites evidence');
+  const risky=structuredClone(bundle);const g=risky.records.find(x=>x.normalized_result?.graph).normalized_result.graph;
+  const w=g.nodes.find(n=>n.kind==='browser-window').observations[0].properties;
+  w.web_preferences=[{name:'nodeIntegration',value:{status:'literal',value:true}},{name:'contextIsolation',value:{status:'literal',value:false}},{name:'sandbox',value:{status:'expression',value:null}}];
+  g.nodes.find(n=>n.kind==='context-bridge-api').observations[0].properties.members=['invoke','hello'];
+  const rr=reviewSecurity({bundle:risky,summary,secrets:{hits:[{kind:'AWS access key',severity:'high',file:'main.js',line:3,masked:'AKIA…V5',length:20}],hosts:[]}});
+  const tt=rr.findings.map(f=>`${f.severity}:${f.title}`);
+  for(const x of ['high:Web pages can use Node.js','high:Context isolation is turned off','unknown:sandbox is set by a computed value','high:Possible AWS access key in code'])assert.ok(tt.includes(x),x);
+  assert.ok(tt.some(x=>x.startsWith('medium:Page API “greetings” exposes general-purpose functions')));
+  assert.equal(rr.findings[0].severity,'high');
+});
