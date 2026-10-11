@@ -68,3 +68,4 @@ Observed problems: (a) answer shows raw markdown (`**`) because output is render
 - AI status pill (provider · model, refreshed every 15 s). Safe Markdown renderer builds React elements only.
 - "Copy as Markdown" / "Save…": AI-ready Markdown with provenance; home folder replaced by ~ (tested). Save also writes the full evidence bundle.
 - npm test: 10 passed. Real Electron under Xvfb: analysed fixtures/simple-app.asar via the app bridge, rendered summary/dark/evidence sheet (docs/screenshots). macOS vibrancy/inset title bar not verifiable here.
+| macOS screenshot (user) | New UI renders on the Mac; summary, findings, coverage and AI pill "Ollama · dolphin-phi:latest" (green) confirmed. Delete, Copy as Markdown and cancel/quit not yet reported. |
