@@ -10,7 +10,9 @@ const here = dirname(fileURLToPath(import.meta.url));
 let window, store, active;
 function trusted(event) { if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) throw new Error('Untrusted IPC caller'); }
 function handle(name, fn) { ipcMain.handle(name, async (event, ...args) => { trusted(event); return fn(...args); }); }
-await app.whenReady();
+// No top-level await before ready: in an ESM main module Electron emits 'ready' only after the
+// module finishes evaluating, so awaiting it at top level deadlocks (window never appears).
+async function start() {
 store = new ProjectStore(join(app.getPath('userData'), 'projects')); await store.recover();
 session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
 session.defaultSession.setPermissionCheckHandler(() => false);
@@ -75,6 +77,11 @@ handle('export', async id => {
   return true;
 });
 await window.loadFile(join(here, '../../dist/index.html'));
+}
+app.whenReady().then(start).catch(error => {
+  dialog.showErrorBox('Lumen could not start', String(error?.stack ?? error));
+  app.exit(1);
+});
 let quitting = false;
 app.on('before-quit', event => {
   if (!active || quitting) return;

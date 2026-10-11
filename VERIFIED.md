@@ -44,3 +44,8 @@ Limits: descendant enumeration uses /proc and is Linux-only. On macOS/Windows th
 Fix: descendant listing on macOS/other POSIX now uses the system process table (`/bin/ps -A -o pid=,ppid=`, fixed path, no shell, bounded), and the snapshot is taken before asking the engine to close. The ps path is unit-tested on Linux (7/7 pass); awaiting a macOS rerun. Windows remains "not enumerable" → unverified.
 
 | macOS rerun after ps fix (commit b8dfe9d) | **PASSED**: analysis + export, cleanup `{"method":"graceful","verified":true,"descendantsChecked":0,"survivors":[]}`. |
+
+## Desktop startup hang (user's Mac: Electron icon bounced, no window)
+
+Cause: top-level `await app.whenReady()` in the ESM main module deadlocks — Electron emits 'ready' only after the module finishes evaluating. Fix: start() is called from app.whenReady().then(...); startup errors show a dialog and exit.
+Reproduced in container with Electron 40.0.0 under Xvfb + remote debugging: original main → no page after 12 s; fixed main → page "Lumen Local Studio" loaded from dist/index.html. Awaiting confirmation on the user's Mac.
