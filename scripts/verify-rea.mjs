@@ -15,4 +15,8 @@ try {
   assert(bundle, 'Export missing');
   console.log('PASS: real REA initialize, static analysis, canonical summary, complete bundle export');
   console.log(JSON.stringify(result.normalized_result).slice(0, 1200));
-} finally { await adapter.close(); }
+} finally {
+  const cleanup = await adapter.close();
+  console.log('Cleanup:', JSON.stringify(cleanup));
+  if (!cleanup.verified) { console.error('FAIL: engine process cleanup not verified'); process.exitCode = 1; }
+}

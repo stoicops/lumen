@@ -22,7 +22,7 @@ Read docs/REQUIREMENTS.md, docs/UPSTREAM-NOTES.md and README.md first. User: Sur
 
 ## Material limitations / next actions in order
 
-1. Cancellation during connect is deferred until connection resolves. Analysis/export have AbortSignal support, but SDK close does not establish verified process-tree cleanup. Add bounded connect/close, owned PID tracking and tests; quit must await cancellation/cleanup where possible. Distinguish cancelled request from verified stopped execution.
+1. DONE (core, see VERIFIED.md): bounded/abortable connect, owned PID tracking, verified process-tree cleanup (src/core/process-cleanup.mjs), `cancelling` persisted until cleanup confirmed, quit waits up to 15 s. REMAINING: descendant enumeration on macOS/Windows (currently reported as unverified); exercise cancel/quit in a running Electron app on the user's Mac.
 2. Only atomic JSON metadata is durable, not a full persistent queue. Replace with SQLite transactions/migrations when adding multiple jobs. Persist progress events and completion timestamps. Handle corrupt records visibly; current list skips them.
 3. The UI shows engine summary JSON, not a visual architecture map or a friendly findings list. Build projections from actual bundle schema with fixtures. Preserve parent_evidence_id, provenance and limitations. Never fabricate graph nodes or evidence confidence.
 4. Chat is single-turn, non-streaming and summary-only. Add bounded context retrieval, streaming/cancel, conversations and citation validation. Label model references as unverified until resolved against retained facts. AI prompt instructions alone do not guarantee grounding.

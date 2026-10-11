@@ -6,7 +6,8 @@ import { join } from 'node:path';
 import http from 'node:http';
 import { localEndpoint, askEvidence } from '../src/core/local-model.mjs';
 import { ProjectStore } from '../src/core/projects.mjs';
-import { ReaAdapter } from '../src/core/rea-adapter.mjs';
+import { ReaAdapter, CancelledError } from '../src/core/rea-adapter.mjs';
+import { alive, descendants } from '../src/core/process-cleanup.mjs';
 test('local-only endpoint policy rejects cloud, aliases, credentials and unsafe schemes', () => {
   for(const url of ['https://api.example.com/v1','http://localhost:1234/v1','http://127.0.0.1.example.com/v1','file:///etc/passwd','http://user:pass@127.0.0.1/v1','http://127.0.0.1/v1?route=cloud'])assert.throws(()=>localEndpoint(url));
   assert.equal(localEndpoint('http://127.0.0.1:1234/v1/'),'http://127.0.0.1:1234/v1');
@@ -25,4 +26,24 @@ test('evidence chat supplies no tools and rejects redirects',async()=>{
   try{const result=await askEvidence({endpoint:`http://127.0.0.1:${server.address().port}/v1`,model:'fixture',question:'What is known?',evidence:{evidence_id:'fixture'}});assert.match(result.answer,/Unknown/);assert.equal(captured.tools,undefined);assert.match(captured.messages[1].content,/fixture/);}finally{await new Promise(r=>server.close(r));}
   const redirect=http.createServer((_req,res)=>{res.writeHead(302,{location:'https://example.com'});res.end();});await new Promise(r=>redirect.listen(0,'127.0.0.1',r));
   try{await assert.rejects(askEvidence({endpoint:`http://127.0.0.1:${redirect.address().port}/v1`,model:'fixture',question:'Q',evidence:{}}));}finally{await new Promise(r=>redirect.close(r));}
+});
+test('cancel during connect stops the engine without waiting for the handshake and verifies process-tree cleanup',async()=>{
+  const fixture=new URL('./fixtures/stubborn-engine.mjs',import.meta.url).pathname;
+  const adapter=new ReaAdapter({launch:{command:process.execPath,args:[fixture]}});
+  const controller=new AbortController();
+  const started=Date.now();setTimeout(()=>controller.abort(),400);
+  await assert.rejects(adapter.connect({signal:controller.signal}),e=>e instanceof CancelledError);
+  assert.ok(Date.now()-started<2000,'connect must reject promptly on cancel');
+  assert.ok(adapter.pid,'owned PID recorded');
+  const tree=await descendants(adapter.pid);
+  const cleanup=await adapter.close();
+  assert.equal(alive(adapter.pid),false);
+  assert.equal(cleanup.survivors.length,0);
+  if(process.platform==='linux'){assert.equal(cleanup.verified,true);assert.equal(cleanup.method,'SIGKILL');assert.ok(tree.length>=1);for(const pid of tree)assert.equal(alive(pid),false);}
+});
+test('connect timeout is bounded',async()=>{
+  const fixture=new URL('./fixtures/stubborn-engine.mjs',import.meta.url).pathname;
+  const adapter=new ReaAdapter({launch:{command:process.execPath,args:[fixture]},connectTimeoutMs:300});
+  await assert.rejects(adapter.connect(),/timed out/);
+  assert.equal((await adapter.close()).survivors.length,0);
 });
