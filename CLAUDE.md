@@ -38,3 +38,10 @@ No cloud fallback, arbitrary shell, model-triggered process execution, runtime c
 ## Working conventions
 
 Preserve existing user work; no destructive target changes. Run relevant tests after meaningful edits. Keep upstream behind adapter and do not deep-import its modules. Maintain a VERIFIED.md with commands, environment and outcomes. Finish one usable vertical slice before reconstruction. Do not exhaust context on cosmetic rewrites; checkpoint this file with exact unfinished work.
+
+## Added after item 4 (same session)
+
+- `.app`/.asar auto-resolution (src/core/target.mjs); shared read-only file visitor (src/core/read-sources.mjs) used by secret-scan and license-scan.
+- Licensing review (src/core/license-scan.mjs, src/ui/licensing.jsx): detects license/trial mechanisms, rates robustness (trivial/weak/moderate/strong), explains how each works, the weakness class, and the hardening fix. Defensive framing for the app's own author; redacts hardcoded keys; no working bypass produced. In Markdown export.
+- Chat: SSE streaming with Stop, saved multi-turn conversations in SQLite.
+- REMAINING next: installable/signed desktop build (electron-builder), accessibility pass, Windows process enumeration, multi-job queue.

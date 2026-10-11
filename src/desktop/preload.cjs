@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('studio', Object.freeze({
   projects: () => ipcRenderer.invoke('projects'),
   project: id => ipcRenderer.invoke('project', id),
   events: id => ipcRenderer.invoke('events', id),
+  licensing: id => ipcRenderer.invoke('licensing', id),
   remove: id => ipcRenderer.invoke('delete', id),
   architecture: id => ipcRenderer.invoke('map', id),
   security: id => ipcRenderer.invoke('security', id),

@@ -94,7 +94,7 @@ export class ProjectStore {
 }
 // Markdown handoff designed to paste into Claude or another assistant. Built from the same projection
 // as the UI so it never states more than the evidence; home-folder paths are shortened to ~.
-export function report(project, { home, security } = {}) {
+export function report(project, { home, security, licensing } = {}) {
   const redact = text => (home && typeof text === 'string' ? text.split(home).join('~') : text);
   const view = describeEvidence(project.evidence);
   const out = [
@@ -118,6 +118,8 @@ export function report(project, { home, security } = {}) {
     '', '## Unknowns', '', ...view.unknowns.map(l => `- ${l}`),
     ...(security ? ['', '## Security checks', '', 'From REA facts and Lumen\'s read-only key scan. Things to review, not proof of a vulnerability. Keys are masked.', '',
       ...security.findings.filter(f => f.severity !== 'pass').map(f => `- **${f.severity}** ${f.title}: ${f.detail}${f.location?.path ? ` (${f.location.path}${f.location.line ? ':' + f.location.line : ''})` : ''}`)] : []),
+    ...(licensing?.findings?.length ? ['', '## How licensing is enforced', '', licensing.summary, '',
+      ...licensing.findings.map(f => `- **${f.robustness}** (${f.file}:${f.line}) — ${f.mechanism} Weakness: ${f.weakness} Harden: ${f.harden}`)] : []),
     '', '## Note for an AI assistant reading this', '', 'Answer only from the facts above and cite the field paths. Say "unknown" when the evidence does not cover something. Do not treat the coverage area names as features of the app.', '');
   return redact(out.join('\n'));
 }

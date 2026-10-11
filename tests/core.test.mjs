@@ -236,3 +236,28 @@ test('target resolution routes .app bundles to their inner app.asar and notes un
   await assert.rejects(resolveTarget(join(root,'x.bin')+''),/could not be found|JavaScript/);
   assert.equal((await resolveTarget(join(res,'app.asar'))).kind,'asar');
 });
+test('licensing review classifies mechanisms by robustness and gives hardening advice',async()=>{
+  const {analyzeLicensing}=await import('../src/core/license-scan.mjs');
+  const {mkdir,writeFile}=await import('node:fs/promises');
+  const dir=await mkdtemp(join(tmpdir(),'lumen-lic-'));
+  await writeFile(join(dir,'license.js'),[
+    'let isPro = false;',
+    'if (licenseKey === "SUPER-SECRET-KEY-123") isPro = true;',
+    'const daysLeft = (trialEnd - Date.now()) / 86400000;',
+    'localStorage.set("premium", true);',
+    'crypto.verify("RSA-SHA256", payload, publicKey, licenseSignature);',
+    'fetch("https://api.vendor.com/activate?license=" + key);',
+  ].join('\n'));
+  await writeFile(join(dir,'noise.js'),'const x = 1; // nothing relevant here');
+  const r=await analyzeLicensing(dir);
+  const ids=r.findings.map(f=>f.id);
+  for(const id of ['hardcoded-compare','bool-flag','trial-local-clock','local-store','offline-signature','server-validation'])assert.ok(ids.includes(id),id);
+  assert.equal(r.weakest,'trivial');
+  assert.equal(r.findings[0].robustness,'trivial'); // sorted weakest first
+  assert.ok(r.findings.every(f=>f.harden&&f.mechanism&&f.weakness));
+  assert.ok(!JSON.stringify(r).includes('SUPER-SECRET-KEY-123'),'full key redacted from snippet');
+  assert.equal((await analyzeLicensing(join(dir),{})).findings.length>0,true);
+  // a target with no licensing vocabulary yields a clean summary, no findings
+  const empty=await mkdtemp(join(tmpdir(),'lumen-noلic-'));await writeFile(join(empty,'a.js'),'console.log(1)');
+  const none=await analyzeLicensing(empty);assert.equal(none.findings.length,0);assert.match(none.summary,/No licensing/);
+});

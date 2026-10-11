@@ -99,3 +99,8 @@ User reported "all works" after pulling the map, security and checked-answer cha
 - Store moved to node:sqlite (WAL, migrations, transactions); evidence bundles stay as files. Legacy project.json folders imported once; unreadable ones listed as "unreadable". Job events persisted.
 - Chat streams over SSE with a byte limit enforced while reading; Stop keeps the partial answer marked "stopped early"; conversations saved per project with follow-ups (bounded history).
 - npm test: 17 passed. Electron + fake streaming server: mid-stream text shown, follow-up received earlier messages, Stop recorded, conversation restored after reload.
+
+## Licensing review, .app resolution, shared source reader
+
+- analyzeLicensing classifies mechanisms by robustness with how-it-works/weakness/harden, redacts keys. Electron run on a demo .asar: 6 findings (2 trivial, 4 weak). docs/screenshots/10-licensing.png.
+- visitTextFiles shared by secret + licensing scans (read-only, bounded, .asar-aware). npm test: 19 passed.

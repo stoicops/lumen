@@ -4,6 +4,7 @@ import { describeEvidence, friendlyError } from '../core/findings.mjs';
 import { Markdown } from './markdown.jsx';
 import { ArchitectureMap } from './map.jsx';
 import { SecurityView } from './security.jsx';
+import { LicensingView } from './licensing.jsx';
 import { CheckedAnswer } from './answer.jsx';
 import './style.css';
 
@@ -213,6 +214,7 @@ function App() {
                 <button role="tab" aria-selected={tab === 'summary'} className={tab === 'summary' ? 'on' : ''} onClick={() => setTab('summary')}>Summary</button>
                 <button role="tab" aria-selected={tab === 'map'} className={tab === 'map' ? 'on' : ''} onClick={() => setTab('map')}>Map</button>
                 <button role="tab" aria-selected={tab === 'security'} className={tab === 'security' ? 'on' : ''} onClick={() => setTab('security')}>Security</button>
+                <button role="tab" aria-selected={tab === 'licensing'} className={tab === 'licensing' ? 'on' : ''} onClick={() => setTab('licensing')}>Licensing</button>
                 <button role="tab" aria-selected={tab === 'raw'} className={tab === 'raw' ? 'on' : ''} onClick={() => setTab('raw')}>Raw evidence</button>
               </div>
               <button className="btn" onClick={() => window.studio.copyMarkdown(project.id).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }).catch(e => setError({ message: e.message }))}>{copied ? 'Copied ✓' : 'Copy as Markdown'}</button>
@@ -227,6 +229,7 @@ function App() {
             <div className="col-main">
               {tab === 'summary' && (view ? <Summary view={view} onShow={setSheet} /> : <section className="card"><p>No evidence to show for this analysis{project.status === 'failed' ? ' because it failed' : ''}.</p></section>)}
               {tab === 'security' && (project.status === 'completed' ? <SecurityView projectId={project.id} /> : <section className="card"><p>Security checks need a completed analysis.</p></section>)}
+              {tab === 'licensing' && (project.status === 'completed' ? <LicensingView projectId={project.id} /> : <section className="card"><p>Licensing review needs a completed analysis.</p></section>)}
               {tab === 'raw' && <section className="card"><pre className="raw">{JSON.stringify(project.evidence ?? { status: project.status }, null, 2)}</pre></section>}
             </div>
             <div className="col-side"><AskPanel project={project} providers={providers} selection={selection} setSelection={setSelection} /></div>

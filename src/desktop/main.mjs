@@ -8,6 +8,7 @@ import { ReaAdapter } from '../core/rea-adapter.mjs';
 import { projectArchitecture } from '../core/graph.mjs';
 import { reviewSecurity } from '../core/security.mjs';
 import { scanTarget } from '../core/secret-scan.mjs';
+import { analyzeLicensing } from '../core/license-scan.mjs';
 import { resolveTarget } from '../core/target.mjs';
 import { ProjectStore, report } from '../core/projects.mjs';
 import { discoverModels, streamChat } from '../core/local-model.mjs';
@@ -15,9 +16,9 @@ import { describeEvidence } from '../core/findings.mjs';
 import { buildContext, checkAnswer, buildMessages } from '../core/grounding.mjs';
 const here = dirname(fileURLToPath(import.meta.url));
 // Electron's fs treats .asar files as folders; the key scan must read the raw archive bytes.
-async function scanWithoutAsarShim(target, signal) {
+async function scanWithoutAsarShim(fn, target, signal) {
   const previous = process.noAsar; process.noAsar = true;
-  try { return await scanTarget(target, { signal }); } finally { process.noAsar = previous; }
+  try { return await fn(target, { signal }); } finally { process.noAsar = previous; }
 }
 async function readBundle(id) {
   const file = join(store.path(id), 'evidence.json');
@@ -47,8 +48,9 @@ window.webContents.on('will-navigate', event => event.preventDefault());
 handle('choose', async () => { const result = await dialog.showOpenDialog(window, { title: 'Select JavaScript app folder or ASAR', properties: ['openFile', 'openDirectory'], message: 'Choose an app folder, a Mac .app, or an .asar file' }); return result.canceled ? null : result.filePaths[0]; });
 handle('projects', () => store.list());
 handle('project', id => store.get(id));
+handle('licensing', async id => { const p = await store.get(id); return p.licensing ?? { unavailable: p.evidence ? 'This analysis was made before licensing review existed. Analyse the app again.' : 'Needs a completed analysis.' }; });
 handle('events', id => { store.path(id); return store.events(id); });
-handle('copyMarkdown', async id => { const project = await store.get(id); clipboard.writeText(report(project, { home: homedir(), security: project.evidence ? await securityFor(id) : null })); return true; });
+handle('copyMarkdown', async id => { const project = await store.get(id); clipboard.writeText(report(project, { home: homedir(), security: project.evidence ? await securityFor(id) : null, licensing: project.licensing })); return true; });
 handle('map', async id => {
   const { bundle, unavailable } = await readBundle(id); if (unavailable) return { unavailable };
   return projectArchitecture(bundle) ?? { unavailable: 'This evidence has no application graph to draw.' };
@@ -79,7 +81,8 @@ handle('analyze', async path => {
   if (active) throw new Error('Another analysis is running');
   if (typeof path !== 'string' || !path || path.length > 4096 || path !== resolve(path)) throw new Error('Select an absolute local target path');
   const resolved = await resolveTarget(await realpath(path));
-  const project = await store.create(resolved.target);
+  const target = resolved.target;
+  const project = await store.create(target);
   project.source = path; project.resolution = resolved.kind; project.resolutionNotes = resolved.notes; const adapter = new ReaAdapter(); const controller = new AbortController();
   let finished; active = { controller, adapter, project, done: new Promise(r => { finished = r; }) };
   project.status = 'running'; project.startedAt = new Date().toISOString(); await store.save(project);
@@ -94,7 +97,12 @@ handle('analyze', async path => {
     progress({ message: 'Saving complete evidence bundle' });
     await adapter.export(join(store.path(project.id), 'evidence.json'), { signal: controller.signal });
     progress({ message: 'Checking the files for exposed keys' });
-    project.secrets = await scanWithoutAsarShim(target, controller.signal).catch(error => {
+    project.secrets = await scanWithoutAsarShim(scanTarget, target, controller.signal).catch(error => {
+      if (controller.signal.aborted) throw error;
+      return { error: String(error.message ?? error) };
+    });
+    progress({ message: 'Looking at how licensing is enforced' });
+    project.licensing = await scanWithoutAsarShim(analyzeLicensing, target, controller.signal).catch(error => {
       if (controller.signal.aborted) throw error;
       return { error: String(error.message ?? error) };
     });
@@ -106,7 +114,7 @@ handle('analyze', async path => {
     if (!project.cleanup.verified) project.cleanupWarning = `Engine cleanup not confirmed: ${project.cleanup.reason ?? 'unknown'}. Check for leftover REA processes before retrying.`;
     // A cancellation is only reported as `cancelled` once the engine is confirmed stopped.
     project.status = outcome === 'cancelled' && !project.cleanup.verified ? 'cancelling' : outcome;
-    if (outcome === 'cancelled') { project.evidence = undefined; project.secrets = undefined; } // never expose a partial result after cancel
+    if (outcome === 'cancelled') { project.evidence = undefined; project.secrets = undefined; project.licensing = undefined; } // never expose a partial result after cancel
     project.finishedAt = new Date().toISOString();
     active = null; await store.save(project); store.event(project.id, project.status, project.error ?? (project.cleanup?.verified ? 'Engine stopped (verified)' : project.cleanup?.reason)); finished();
   }
@@ -148,7 +156,7 @@ handle('export', async id => {
   const project = await store.get(id);
   const result = await dialog.showSaveDialog(window, { defaultPath: `${project.name.replace(/[^a-z0-9_-]/gi, '_')}-lumen.md`, filters: [{ name: 'Markdown report', extensions: ['md'] }] });
   if (result.canceled) return false;
-  await writeFile(result.filePath, report(project, { home: homedir(), security: project.evidence ? await securityFor(id) : null }), 'utf8');
+  await writeFile(result.filePath, report(project, { home: homedir(), security: project.evidence ? await securityFor(id) : null, licensing: project.licensing }), 'utf8');
   if (project.status === 'completed') await copyFile(join(store.path(id), 'evidence.json'), `${result.filePath}.${randomUUID()}.evidence.json`);
   return true;
 });
