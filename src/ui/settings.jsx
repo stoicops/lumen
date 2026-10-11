@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 
 export function Settings({ onClose }) {
-  const [ghidraDir, setGhidraDir] = useState(''); const [javaHome, setJavaHome] = useState(''); const [saved, setSaved] = useState(false);
+  const [ghidraDir, setGhidraDir] = useState(''); const [javaHome, setJavaHome] = useState(''); const [ghidraMaxMem, setGhidraMaxMem] = useState('2G'); const [saved, setSaved] = useState(false);
   const [diag, setDiag] = useState(null); const [checking, setChecking] = useState(false);
-  useEffect(() => { window.studio.settings().then(s => { setGhidraDir(s.ghidraDir ?? ''); setJavaHome(s.javaHome ?? ''); }).catch(() => {}); }, []);
-  const save = async () => { await window.studio.saveSettings({ ghidraDir, javaHome }); setSaved(true); setTimeout(() => setSaved(false), 1500); };
+  useEffect(() => { window.studio.settings().then(s => { setGhidraDir(s.ghidraDir ?? ''); setJavaHome(s.javaHome ?? ''); setGhidraMaxMem(s.ghidraMaxMem || '2G'); }).catch(() => {}); }, []);
+  const save = async () => { await window.studio.saveSettings({ ghidraDir, javaHome, ghidraMaxMem }); setSaved(true); setTimeout(() => setSaved(false), 1500); };
   const pick = async () => { const d = await window.studio.pickFolder(); if (d) setGhidraDir(d); };
-  const check = async () => { setChecking(true); setDiag(null); try { await window.studio.saveSettings({ ghidraDir, javaHome }); setDiag(await window.studio.diagnoseEngine()); } catch (e) { setDiag({ ok: false, raw: e.message }); } finally { setChecking(false); } };
+  const check = async () => { setChecking(true); setDiag(null); try { await window.studio.saveSettings({ ghidraDir, javaHome, ghidraMaxMem }); setDiag(await window.studio.diagnoseEngine()); } catch (e) { setDiag({ ok: false, raw: e.message }); } finally { setChecking(false); } };
   return <div className="sheet-backdrop" onClick={onClose}><div className="sheet wide" role="dialog" aria-modal="true" aria-label="Settings" onClick={e => e.stopPropagation()}>
     <div className="card-head"><h3>Settings</h3><button className="link" onClick={onClose}>Close</button></div>
     <h4>Decompiler engine (for .exe, Mac apps and other native binaries)</h4>
@@ -16,6 +16,9 @@ export function Settings({ onClose }) {
     </label>
     <label>Java 21 home (optional — auto-detected on macOS)
       <div className="row-inline"><input value={javaHome} onChange={e => setJavaHome(e.target.value)} placeholder="Leave blank to auto-detect (/usr/libexec/java_home -v 21)" /><button className="btn" onClick={async () => { const d = await window.studio.pickFolder(); if (d) setJavaHome(d); }}>Choose…</button></div>
+    </label>
+    <label>Ghidra memory limit (lower this if your Mac runs low on RAM)
+      <select value={ghidraMaxMem} onChange={e => setGhidraMaxMem(e.target.value)} style={{ maxWidth: 160 }}><option value="1G">1 GB</option><option value="2G">2 GB (default)</option><option value="4G">4 GB</option><option value="6G">6 GB</option></select>
     </label>
     <details><summary>How to install Ghidra on this Mac (5 minutes)</summary>
       <ol className="plain">

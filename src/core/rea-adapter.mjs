@@ -14,6 +14,12 @@ const NATIVE_READ = ['open_binary', 'close_binary', 'binary_overview', 'inspect_
   'list_segments', 'list_names', 'binary_session'];
 const ALLOWED = new Set([...JS_TOOLS, ...NATIVE_READ]);
 export const CONNECT_TIMEOUT_MS = 60000;
+// Guard against an engine section so large it would blank the renderer when sent over IPC.
+const MAX_SECTION_BYTES = 512 * 1024;
+function cap(data) {
+  try { const json = JSON.stringify(data); if (json.length <= MAX_SECTION_BYTES) return data; return { truncated: true, bytes: json.length, preview: json.slice(0, 4000) }; }
+  catch { return { truncated: true, note: 'section could not be serialized' }; }
+}
 export class CancelledError extends Error { constructor(message = 'Cancelled') { super(message); this.name = 'CancelledError'; } }
 
 // Rejects as soon as the signal aborts or the timeout passes, without waiting for `work`.
@@ -98,13 +104,11 @@ export class ReaAdapter {
       ['plist', 'inspect_plist', { path }],
       ['android', 'inspect_android_package', { path }],
       ['managed', 'inspect_managed_artifact', { path }],
-    ]) { const r = await this.tryCall(name, args, { signal }); if (r.ok) sections[key] = r.data; }
-    // Deep sections only when an engine is present.
-    if (engineReady) {
-      const strings = await this.tryCall('list_strings', {}, { signal }); if (strings.ok) sections.strings = strings.data;
-      const procs = await this.tryCall('list_procedures', {}, { signal }); if (procs.ok) sections.procedures = procs.data;
-      sections.overview = overview.data;
-    }
+    ]) { const r = await this.tryCall(name, args, { signal }); if (r.ok) sections[key] = cap(r.data); }
+    // Deep sections only when an engine is present. Keep ONLY the bounded overview — pulling full
+    // list_strings / list_procedures can be tens of MB, which over IPC can blank the renderer. Detailed
+    // listings are fetched on demand later, not bundled into the project record.
+    if (engineReady) sections.overview = cap(overview.data);
     return { opened: true, identity, engineReady, engineMessage: engineReady ? null : overview.message, sections };
   }
   export(path, options) { return this.call('export_evidence_bundle', { path, overwrite: false }, options); }

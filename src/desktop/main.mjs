@@ -70,6 +70,8 @@ function normalizeGhidraDir(dir) {
 function engineEnv() {
   const s = readSettings(); const env = {};
   if (typeof s.ghidraDir === 'string' && s.ghidraDir) env.GHIDRA_INSTALL_DIR = normalizeGhidraDir(s.ghidraDir);
+  const maxmem = (typeof s.ghidraMaxMem === 'string' && /^\d+[GM]$/.test(s.ghidraMaxMem)) ? s.ghidraMaxMem : '2G';
+  if (env.GHIDRA_INSTALL_DIR) env.GHIDRA_HEADLESS_MAXMEM = maxmem;
   const javaHome = resolveJavaHome(s);
   if (javaHome) {
     env.JAVA_HOME = javaHome;
@@ -102,7 +104,7 @@ handle('projects', () => store.list());
 handle('project', id => store.get(id));
 handle('native', async id => { const p = await store.get(id); return p.native ?? { unavailable: 'No native inspection for this analysis.' }; });
 handle('settings', () => readSettings());
-handle('saveSettings', next => { if (!next || typeof next !== 'object') throw new Error('Invalid settings'); const clean = {}; if ('ghidraDir' in next) clean.ghidraDir = typeof next.ghidraDir === 'string' ? next.ghidraDir : ''; if ('javaHome' in next) clean.javaHome = typeof next.javaHome === 'string' ? next.javaHome : ''; return writeSettings(clean); });
+handle('saveSettings', next => { if (!next || typeof next !== 'object') throw new Error('Invalid settings'); const clean = {}; if ('ghidraDir' in next) clean.ghidraDir = typeof next.ghidraDir === 'string' ? next.ghidraDir : ''; if ('javaHome' in next) clean.javaHome = typeof next.javaHome === 'string' ? next.javaHome : ''; if ('ghidraMaxMem' in next) clean.ghidraMaxMem = typeof next.ghidraMaxMem === 'string' ? next.ghidraMaxMem : ''; return writeSettings(clean); });
 handle('diagnoseEngine', () => diagnoseEngine());
 handle('pickFolder', async () => { const r = await dialog.showOpenDialog(window, { title: 'Select your Ghidra install folder', properties: ['openDirectory'] }); return r.canceled ? null : r.filePaths[0]; });
 handle('licensing', async id => { const p = await store.get(id); return p.licensing ?? { unavailable: p.evidence ? 'This analysis was made before licensing review existed. Analyse the app again.' : 'Needs a completed analysis.' }; });

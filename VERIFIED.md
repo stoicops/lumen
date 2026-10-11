@@ -146,3 +146,7 @@ User reported "all works" after pulling the map, security and checked-answer cha
 
 - User diagnostics: Java 21 OK, platform OK; only failing check ghidra-installation "executable_missing" because GHIDRA_INSTALL_DIR was /…/ghidra_12.1.4_PUBLIC/Ghidra (the inner Ghidra/) instead of the release root /…/ghidra_12.1.4_PUBLIC.
 - Fix: normalizeGhidraDir() accepts the root, the inner Ghidra/ (→ parent), or a parent containing a ghidra_* release (→ descend), keying off Ghidra/application.properties. Unit-checked with a simulated layout. This was the whole blocker; Java/platform were fine.
+
+## Ghidra triggered on the user Mac but blanked the screen — bounded payload + memory cap
+
+- Folder normalization fixed the provider; Ghidra ran. Blank window attributed to (a) pulling full list_strings/list_procedures (tens of MB) over IPC into the renderer, and (b) the Ghidra JVM memory footprint. Fixes: inspectNative now keeps only the bounded overview (no wholesale strings/procedures), every section capped to 512 KB (cap()); GHIDRA_HEADLESS_MAXMEM defaults to 2G with a Settings control (1/2/4/6 GB). Unverified on macOS (no Ghidra here); logic/build/tests green.
