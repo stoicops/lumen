@@ -232,7 +232,7 @@ test('target resolution routes .app bundles to their inner app.asar and notes un
   const folder=join(root,'plain');await mkdir(folder);
   assert.equal((await resolveTarget(folder)).kind,'dir');
   const bare=join(root,'Empty.app');await mkdir(bare);
-  await assert.rejects(resolveTarget(bare),/could not find JavaScript code/);
+  await assert.rejects(resolveTarget(bare),/could not find an executable/);
   await assert.rejects(resolveTarget(join(root,'x.bin')+''),/could not be found|JavaScript/);
   assert.equal((await resolveTarget(join(res,'app.asar'))).kind,'asar');
 });
