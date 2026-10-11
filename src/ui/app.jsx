@@ -207,7 +207,7 @@ function App() {
       <div className="content">
         <DropZone busy={busy} status={status} onPath={analyze} onChoose={choose} onCancel={() => window.studio.cancel().catch(e => setError({ message: e.message }))} />
         {error && <div className="alert" role="alert"><strong>{error.message}</strong>{error.detail && error.detail !== error.message && <details><summary>Technical details</summary><pre>{error.detail}</pre></details>}</div>}
-        {!project && !busy && <div className="welcome"><h1>See how an app fits together.</h1><p>Drop a JavaScript or Electron app above. Lumen reads it on this Mac, explains what the code shows, and lets you ask your own local AI about it. Nothing leaves your computer.</p></div>}
+        {!project && !busy && <div className="welcome"><h1>See how an app fits together.</h1><p>Drop a JavaScript or Electron app above. Lumen reads it on your computer, explains what the code shows, and lets you ask your own local AI about it. Nothing leaves your computer.</p></div>}
         {project && <>
           <div className="project-head">
             <div><h1>{project.name}</h1><span className="meta"><StatusBadge status={project.status} /> {when(project.createdAt)}</span></div>
@@ -225,7 +225,7 @@ function App() {
           </div>
           {project.cleanupWarning && <div className="alert warn">{project.cleanupWarning}</div>}
           {project.resolutionNotes?.length > 0 && <div className="alert note">{project.resolutionNotes.map((n, i) => <p key={i}>{n}</p>)}</div>}
-          {project.family && project.family !== 'js' ? (project.status === 'completed' ? <NativeView project={project} onOpenSettings={() => setShowSettings(true)} /> : <section className="card"><p>Inspection {project.status === 'failed' ? 'failed: ' + (project.error ?? '') : 'is ' + project.status}.</p></section>) : <>
+          {project.family && project.family !== 'js' ? (project.status === 'completed' ? <NativeView project={project} platform={platform} onOpenSettings={() => setShowSettings(true)} /> : <section className="card"><p>Inspection {project.status === 'failed' ? 'failed: ' + (project.error ?? '') : 'is ' + project.status}.</p></section>) : <>
           {tab === 'map' && project.status === 'completed' && <ArchitectureMap projectId={project.id} />}
           {tab === 'map' && project.status !== 'completed' && <section className="card"><p>The map needs a completed analysis.</p></section>}
           <div className="columns" hidden={tab === 'map'}>
@@ -242,7 +242,7 @@ function App() {
       </div>
     </main>
     {sheet && view && <EvidenceSheet fact={sheet} view={view} onClose={() => setSheet(null)} />}
-    {showSettings && <Settings onClose={() => setShowSettings(false)} />}
+    {showSettings && <Settings platform={platform} onClose={() => setShowSettings(false)} />}
   </div>;
 }
 createRoot(document.getElementById('root')).render(<App />);

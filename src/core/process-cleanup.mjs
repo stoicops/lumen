@@ -14,10 +14,30 @@ export function alive(pid) {
 
 // Linux: /proc/<pid>/task/<tid>/children. macOS/other POSIX: the system ps process table.
 // Windows returns null = "not enumerable", which keeps cleanup reported as unverified.
-export async function descendants(pid, { method = process.platform === 'linux' ? 'proc' : process.platform === 'win32' ? 'none' : 'ps' } = {}) {
+export async function descendants(pid, { method = process.platform === 'linux' ? 'proc' : process.platform === 'win32' ? 'win' : 'ps' } = {}) {
   if (method === 'proc') return procDescendants(pid);
   if (method === 'ps') return psDescendants(pid);
+  if (method === 'win') return winDescendants(pid);
   return null;
+}
+
+// Windows: PowerShell CIM gives ProcessId,ParentProcessId for every process. Bounded; failure = null.
+async function winDescendants(pid) {
+  const table = await new Promise(resolve => execFile('powershell.exe',
+    ['-NoProfile', '-NonInteractive', '-Command', 'Get-CimInstance Win32_Process | ForEach-Object { "$($_.ProcessId),$($_.ParentProcessId)" }'],
+    { timeout: 5000, maxBuffer: 8 * 1024 * 1024, windowsHide: true }, (error, stdout) => resolve(error ? null : stdout)));
+  if (table === null) return null;
+  const children = new Map();
+  for (const line of table.split(/\r?\n/)) {
+    const [child, parent] = line.trim().split(',').map(Number);
+    if (!Number.isInteger(child) || !Number.isInteger(parent)) continue;
+    if (!children.has(parent)) children.set(parent, []);
+    children.get(parent).push(child);
+  }
+  if (![...children.values()].some(list => list.includes(pid))) return null;
+  const found = []; const queue = [pid];
+  while (queue.length) for (const child of children.get(queue.shift()) ?? []) if (!found.includes(child)) { found.push(child); queue.push(child); }
+  return found;
 }
 
 async function procDescendants(pid) {
@@ -70,6 +90,9 @@ export async function snapshotTree(pid, options) { return pid && alive(pid) ? de
 
 export async function terminateTree(pid, { gracefulMs = 1000, termMs = 1500, killMs = 1500, known = [], snapshot } = {}) {
   if (!pid) return { pid: null, verified: false, reason: 'No owned process ID was recorded.' };
+  // The engine already exited on its own (common for quick jobs): nothing to kill, and no known
+  // descendants left — that is a clean, verified outcome, not an "unconfirmed" one.
+  if (!alive(pid) && !known.some(alive)) return { pid, method: 'already-exited', verified: true, descendantsChecked: 0, survivors: [] };
   if (snapshot === undefined) snapshot = await snapshotTree(pid);
   const tree = [...new Set([...(snapshot ?? []), ...known])];
   const all = [pid, ...tree];

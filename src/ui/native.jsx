@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 
 const row = (k, v) => v != null && <div key={k} className="kv"><dt>{k}</dt><dd>{String(v)}</dd></div>;
 
-export function NativeView({ project, onOpenSettings }) {
+export function NativeView({ project, platform, onOpenSettings }) {
+  const isMac = platform === 'darwin';
   const [data, setData] = useState(null), [error, setError] = useState(''), [diag, setDiag] = useState(null), [fixing, setFixing] = useState(''), [fixed, setFixed] = useState(null);
   const [running, setRunning] = useState(false), [runNote, setRunNote] = useState('');
   useEffect(() => { setData(null); setError(''); setDiag(null); setFixed(null); setRunNote(''); window.studio.native(project.id).then(setData).catch(e => setError(e.message)); }, [project.id]);
@@ -28,7 +29,7 @@ export function NativeView({ project, onOpenSettings }) {
       <p className="hint-text">Identified by REA without running the file. This is a native/compiled target, so Lumen reads its structure rather than its source.</p>
     </section>
 
-    {project.native && project.engineSkipped ? <section className="card engine-needed"><h3>Ghidra skipped to protect your Mac</h3><p>{project.engineSkipped}</p><button className="btn" onClick={onOpenSettings}>Open Settings</button></section> : !data.engineReady ? <section className="card engine-needed">
+    {project.native && project.engineSkipped ? <section className="card engine-needed"><h3>Ghidra skipped to protect your computer</h3><p>{project.engineSkipped}</p><button className="btn" onClick={onOpenSettings}>Open Settings</button></section> : !data.engineReady ? <section className="card engine-needed">
       <h3>Deep decompilation {canDecompile ? 'is ready to run' : 'needs an engine'}</h3>
       {canDecompile ? <>
         <p>Ghidra is configured. Decompiling turns machine code into readable functions, but it is <strong>heavy</strong>: it runs a separate Ghidra engine that can use a lot of CPU and memory for several minutes. Close other big apps first. Lumen runs it only when you click below, never automatically.</p>
@@ -41,7 +42,7 @@ export function NativeView({ project, onOpenSettings }) {
       </> : <>
         <p>Lumen can identify this binary and read its signature and layout, but turning machine code back into readable functions needs a decompiler engine. The free, open-source one is <strong>Ghidra</strong>.</p>
         <ol className="plain">
-          <li>Install Ghidra (and Java 21) on this Mac — Lumen’s Settings has the exact steps.</li>
+          <li>Install Ghidra (and Java 21) on this computer — Lumen’s Settings has the exact steps.</li>
           <li>Point Lumen at the Ghidra folder in Settings.</li>
           <li>Come back here and click “Decompile with Ghidra”.</li>
         </ol>
@@ -55,9 +56,9 @@ export function NativeView({ project, onOpenSettings }) {
           <p><strong>Ghidra folder:</strong> {diag.ghidra?.ok ? 'OK' : (diag.ghidra?.detail ?? 'not detected')}</p>
           <p><strong>Ghidra usable:</strong> {diag.available === true ? 'yes' : 'NO'}{diag.failing ? ` — ${diag.failing.code ?? ''}: ${diag.failing.detail ?? ''}${diag.failing.remediation ? ` (${diag.failing.remediation})` : ''}` : ''}</p>
           {diag.available !== true && <div style={{ marginTop: 8 }}>
-            <p className="hint-text">On macOS, downloaded Ghidra is often blocked by quarantine or its launcher is not executable. Lumen can fix that:</p>
+            {isMac && <><p className="hint-text">On macOS, downloaded Ghidra is often blocked by quarantine or its launcher is not executable. Lumen can fix that:</p>
             <button className="btn primary" onClick={fixPerms} disabled={fixing === 'working'}>{fixing === 'working' ? 'Fixing…' : 'Fix Ghidra permissions'}</button>
-            {fixed && <div className="hint-text">{fixed.steps ? fixed.steps.map((s, i) => <div key={i}>{s.ok ? '✓' : '✗'} {s.label}</div>) : fixed.message}{fixed.ok && ' — now analyse this file again.'}</div>}
+            {fixed && <div className="hint-text">{fixed.steps ? fixed.steps.map((s, i) => <div key={i}>{s.ok ? '✓' : '✗'} {s.label}</div>) : fixed.message}{fixed.ok && ' — now analyse this file again.'}</div>}</>}
           </div>}
         </> : <p className="hint-text">Checking the engine…</p>}
         {data.engineLog && <details open><summary>Ghidra engine log</summary><pre className="raw">{data.engineLog}</pre></details>}

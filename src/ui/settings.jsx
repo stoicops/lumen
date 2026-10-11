@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 
-export function Settings({ onClose }) {
+export function Settings({ platform, onClose }) {
+  const isMac = platform === 'darwin', isWin = platform === 'win32';
   const [ghidraDir, setGhidraDir] = useState(''); const [javaHome, setJavaHome] = useState(''); const [ghidraMaxMem, setGhidraMaxMem] = useState('1G'); const [saved, setSaved] = useState(false);
   const [diag, setDiag] = useState(null); const [checking, setChecking] = useState(false);
   useEffect(() => { window.studio.settings().then(s => { setGhidraDir(s.ghidraDir ?? ''); setJavaHome(s.javaHome ?? ''); setGhidraMaxMem(s.ghidraMaxMem || '1G'); }).catch(() => {}); }, []);
@@ -12,21 +13,29 @@ export function Settings({ onClose }) {
     <h4>Decompiler engine (for .exe, Mac apps and other native binaries)</h4>
     <p className="hint-text">Lumen reads JavaScript/Electron apps on its own. To decompile native binaries it uses <strong>Ghidra</strong>, a free open-source tool. Install it once, point Lumen here, and native analysis turns on.</p>
     <label>Ghidra install folder
-      <div className="row-inline"><input value={ghidraDir} onChange={e => setGhidraDir(e.target.value)} placeholder="/Applications/ghidra_12.1.4_PUBLIC" /><button className="btn" onClick={pick}>Choose…</button></div>
+      <div className="row-inline"><input value={ghidraDir} onChange={e => setGhidraDir(e.target.value)} placeholder={isWin ? 'C:\\ghidra_12.1.4_PUBLIC' : '/Applications/ghidra_12.1.4_PUBLIC'} /><button className="btn" onClick={pick}>Choose…</button></div>
     </label>
-    <label>Java 21 home (optional — auto-detected on macOS)
-      <div className="row-inline"><input value={javaHome} onChange={e => setJavaHome(e.target.value)} placeholder="Leave blank to auto-detect (/usr/libexec/java_home -v 21)" /><button className="btn" onClick={async () => { const d = await window.studio.pickFolder(); if (d) setJavaHome(d); }}>Choose…</button></div>
+    <label>Java 21 home (optional{isMac ? ' — auto-detected on macOS' : ''})
+      <div className="row-inline"><input value={javaHome} onChange={e => setJavaHome(e.target.value)} placeholder={isMac ? 'Leave blank to auto-detect' : 'e.g. C:\\Program Files\\Eclipse Adoptium\\jdk-21'} /><button className="btn" onClick={async () => { const d = await window.studio.pickFolder(); if (d) setJavaHome(d); }}>Choose…</button></div>
     </label>
-    <label>Ghidra memory limit (lower this if your Mac runs low on RAM)
+    <label>Ghidra memory limit (lower this if your computer runs low on RAM)
       <select value={ghidraMaxMem} onChange={e => setGhidraMaxMem(e.target.value)} style={{ maxWidth: 160 }}><option value="1G">1 GB (default)</option><option value="2G">2 GB</option><option value="4G">4 GB</option><option value="6G">6 GB</option></select>
     </label>
-    <details><summary>How to install Ghidra on this Mac (5 minutes)</summary>
+    <details><summary>How to install Ghidra (5 minutes)</summary>
       <ol className="plain">
-        <li>Install Java 21: open Terminal and run <code>brew install --cask temurin@21</code> (or download Temurin 21 from adoptium.net).</li>
-        <li>Download Ghidra 12.1.4 from <code>github.com/NationalSecurityAgency/ghidra/releases</code> — the file named <code>ghidra_12.1.4_PUBLIC_*.zip</code>.</li>
-        <li>Unzip it (double-click). You’ll get a folder like <code>ghidra_12.1.4_PUBLIC</code>. Move it to Applications.</li>
-        <li>Click “Choose…” above and select that folder.</li>
-        <li>Click Save, then analyse a native app again.</li>
+        {isWin ? <>
+          <li>Install Java 21: download the Temurin 21 (JDK) <code>.msi</code> from adoptium.net and run it — tick “Set JAVA_HOME”.</li>
+          <li>Download Ghidra 12.1.4 from <code>github.com/NationalSecurityAgency/ghidra/releases</code> (<code>ghidra_12.1.4_PUBLIC_*.zip</code>).</li>
+          <li>Right-click the zip → Extract All. You’ll get a folder <code>ghidra_12.1.4_PUBLIC</code> (e.g. put it at <code>C:\ghidra_12.1.4_PUBLIC</code>).</li>
+          <li>Click “Choose…” above and select that folder.</li>
+          <li>Click Save, then analyse a native app and click “Decompile with Ghidra”.</li>
+        </> : <>
+          <li>Install Java 21: <code>brew install --cask temurin@21</code> (or Temurin 21 from adoptium.net).</li>
+          <li>Download Ghidra 12.1.4 from <code>github.com/NationalSecurityAgency/ghidra/releases</code> (<code>ghidra_12.1.4_PUBLIC_*.zip</code>).</li>
+          <li>Unzip it; you’ll get <code>ghidra_12.1.4_PUBLIC</code>. Move it to Applications.</li>
+          <li>Click “Choose…” above and select that folder.</li>
+          <li>Click Save, then analyse a native app again.</li>
+        </>}
       </ol>
       <p className="hint-text">Lumen never bundles commercial tools. Ghidra is the supported free engine; Hopper/JEB also work if you already have them installed and set the matching folder.</p>
     </details>

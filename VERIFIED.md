@@ -173,3 +173,9 @@ User reported "all works" after pulling the map, security and checked-answer cha
 ## Windows build
 
 - Verified `electron-builder --win --dir` on Linux (no Wine) produces release/win-unpacked/Lumen.exe (~430 MB, rea-agents unpacked beside the asar). Needs signAndEditExecutable:false to skip the Wine-only rcedit step. Could not deliver the 173 MB zip (30 MB channel cap). Committed config builds an NSIS installer on the user Windows PC via `npm run dist:win` (oneClick:false, choose install dir). On Windows: process-cleanup descendants = not enumerable (cleanup reported unverified but engine still closed); .app/dmg/java_home auto-detect are macOS-only no-ops; 64 GB RAM clears the memory guard.
+
+## Windows: real cleanup verification + platform-aware copy
+
+- Windows descendant enumeration via PowerShell CIM (Win32_Process ProcessId,ParentProcessId); descendants() default for win32 is now "win", so engine cleanup verifies instead of showing a false "cleanup not confirmed" warning.
+- terminateTree treats an already-exited engine with no known survivors as verified success (method "already-exited") — fixes the warning on quick identification jobs on every OS.
+- UI copy no longer hardcodes "Mac": welcome, native panel and Settings are platform-aware; Settings shows Windows vs macOS install steps; the macOS-only "Fix Ghidra permissions" button is hidden on Windows. Build + 22 tests green.
