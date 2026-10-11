@@ -93,9 +93,11 @@ function engineEnv() {
   const javaHome = resolveJavaHome(s);
   if (javaHome) {
     env.JAVA_HOME = javaHome;
-    // Put the JDK and the usual package-manager bins on PATH so Ghidra's launcher finds java.
-    const extra = [join(javaHome, 'bin'), '/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin'];
-    env.PATH = [...extra, process.env.PATH ?? ''].filter(Boolean).join(':');
+    // Put the JDK (and, on POSIX, the usual package-manager bins) on PATH so Ghidra finds java.
+    // Use the platform's PATH separator — ':' on POSIX, ';' on Windows.
+    const extra = process.platform === 'win32' ? [join(javaHome, 'bin')] : [join(javaHome, 'bin'), '/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin'];
+    const PATH_KEY = Object.keys(process.env).find(k => k.toUpperCase() === 'PATH') ?? 'PATH';
+    env[PATH_KEY] = [...extra, process.env[PATH_KEY] ?? ''].filter(Boolean).join(sep === '\\' ? ';' : ':');
   }
   return env;
 }

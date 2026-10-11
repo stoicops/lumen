@@ -179,3 +179,8 @@ User reported "all works" after pulling the map, security and checked-answer cha
 - Windows descendant enumeration via PowerShell CIM (Win32_Process ProcessId,ParentProcessId); descendants() default for win32 is now "win", so engine cleanup verifies instead of showing a false "cleanup not confirmed" warning.
 - terminateTree treats an already-exited engine with no known survivors as verified success (method "already-exited") — fixes the warning on quick identification jobs on every OS.
 - UI copy no longer hardcodes "Mac": welcome, native panel and Settings are platform-aware; Settings shows Windows vs macOS install steps; the macOS-only "Fix Ghidra permissions" button is hidden on Windows. Build + 22 tests green.
+
+## One-shot Windows setup script + PATH separator fix
+
+- Fixed engineEnv PATH join: used ':' always, which corrupts PATH on Windows; now uses the platform separator and the real PATH key casing, and skips the POSIX bin dirs on Windows.
+- scripts/setup-windows.ps1: winget installs Node LTS + Git + Temurin 21; sets JAVA_HOME (user); clones/updates the branch; npm install + dist:win; resolves and downloads Ghidra 12.1.4 via the GitHub releases API, extracts to C:/ghidra_12.1.4_PUBLIC; writes 0X0P+0PPDATA
