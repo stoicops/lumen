@@ -220,3 +220,19 @@ test('SQLite store: migrations, legacy JSON import, damaged records shown, event
   assert.equal(again.db.prepare('SELECT version FROM schema_version').get().version,1);
   again.close();
 });
+test('target resolution routes .app bundles to their inner app.asar and notes unpacked files',async()=>{
+  const {resolveTarget}=await import('../src/core/target.mjs');
+  const {mkdir,writeFile}=await import('node:fs/promises');
+  const root=await mkdtemp(join(tmpdir(),'lumen-app-'));
+  const bundle=join(root,'Demo.app'),res=join(bundle,'Contents','Resources');
+  await mkdir(join(res,'app.asar.unpacked'),{recursive:true});await writeFile(join(res,'app.asar'),'x');
+  const r=await resolveTarget(bundle);
+  assert.equal(r.kind,'app-bundle');assert.equal(r.target,join(res,'app.asar'));
+  assert.ok(r.notes.some(n=>n.includes('app.asar')));assert.ok(r.notes.some(n=>n.includes('unpacked')));
+  const folder=join(root,'plain');await mkdir(folder);
+  assert.equal((await resolveTarget(folder)).kind,'dir');
+  const bare=join(root,'Empty.app');await mkdir(bare);
+  await assert.rejects(resolveTarget(bare),/could not find JavaScript code/);
+  await assert.rejects(resolveTarget(join(root,'x.bin')+''),/could not be found|JavaScript/);
+  assert.equal((await resolveTarget(join(res,'app.asar'))).kind,'asar');
+});

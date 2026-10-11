@@ -220,6 +220,7 @@ function App() {
             </div>
           </div>
           {project.cleanupWarning && <div className="alert warn">{project.cleanupWarning}</div>}
+          {project.resolutionNotes?.length > 0 && <div className="alert note">{project.resolutionNotes.map((n, i) => <p key={i}>{n}</p>)}</div>}
           {tab === 'map' && project.status === 'completed' && <ArchitectureMap projectId={project.id} />}
           {tab === 'map' && project.status !== 'completed' && <section className="card"><p>The map needs a completed analysis.</p></section>}
           <div className="columns" hidden={tab === 'map'}>

@@ -8,6 +8,7 @@ import { ReaAdapter } from '../core/rea-adapter.mjs';
 import { projectArchitecture } from '../core/graph.mjs';
 import { reviewSecurity } from '../core/security.mjs';
 import { scanTarget } from '../core/secret-scan.mjs';
+import { resolveTarget } from '../core/target.mjs';
 import { ProjectStore, report } from '../core/projects.mjs';
 import { discoverModels, streamChat } from '../core/local-model.mjs';
 import { describeEvidence } from '../core/findings.mjs';
@@ -43,7 +44,7 @@ window = new BrowserWindow({ width: 1280, height: 860, minWidth: 900, minHeight:
 window.once('ready-to-show', () => window.show());
 window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 window.webContents.on('will-navigate', event => event.preventDefault());
-handle('choose', async () => { const result = await dialog.showOpenDialog(window, { title: 'Select JavaScript app folder or ASAR', properties: ['openFile', 'openDirectory'] }); return result.canceled ? null : result.filePaths[0]; });
+handle('choose', async () => { const result = await dialog.showOpenDialog(window, { title: 'Select JavaScript app folder or ASAR', properties: ['openFile', 'openDirectory'], message: 'Choose an app folder, a Mac .app, or an .asar file' }); return result.canceled ? null : result.filePaths[0]; });
 handle('projects', () => store.list());
 handle('project', id => store.get(id));
 handle('events', id => { store.path(id); return store.events(id); });
@@ -77,9 +78,9 @@ handle('cancel', async () => {
 handle('analyze', async path => {
   if (active) throw new Error('Another analysis is running');
   if (typeof path !== 'string' || !path || path.length > 4096 || path !== resolve(path)) throw new Error('Select an absolute local target path');
-  const target = await realpath(path); const info = await stat(target);
-  if (!info.isDirectory() && !target.toLowerCase().endsWith('.asar')) throw new Error('Milestone one accepts JavaScript app folders and ASAR files');
-  const project = await store.create(target); const adapter = new ReaAdapter(); const controller = new AbortController();
+  const resolved = await resolveTarget(await realpath(path));
+  const project = await store.create(resolved.target);
+  project.source = path; project.resolution = resolved.kind; project.resolutionNotes = resolved.notes; const adapter = new ReaAdapter(); const controller = new AbortController();
   let finished; active = { controller, adapter, project, done: new Promise(r => { finished = r; }) };
   project.status = 'running'; project.startedAt = new Date().toISOString(); await store.save(project);
   const progress = value => { if (value.message) store.event(project.id, 'progress', value.message); const update = { projectId: project.id, ...value }; if (!window.isDestroyed()) window.webContents.send('progress', update); };

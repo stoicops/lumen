@@ -219,3 +219,4 @@ svg.map:active { cursor: grabbing; }
 .answer.streaming { border-top: 0; }
 .ask-actions { display: flex; gap: 12px; align-items: center; }
 .ask-actions .meta { margin-left: auto; }
+.alert.note { background: var(--accent-soft); } .alert.note p { margin: 2px 0; color: var(--text); font-size: 12.5px; }
