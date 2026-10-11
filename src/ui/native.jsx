@@ -3,8 +3,11 @@ import React, { useEffect, useState } from 'react';
 const row = (k, v) => v != null && <div key={k} className="kv"><dt>{k}</dt><dd>{String(v)}</dd></div>;
 
 export function NativeView({ project, onOpenSettings }) {
-  const [data, setData] = useState(null), [error, setError] = useState('');
-  useEffect(() => { setData(null); setError(''); window.studio.native(project.id).then(setData).catch(e => setError(e.message)); }, [project.id]);
+  const [data, setData] = useState(null), [error, setError] = useState(''), [diag, setDiag] = useState(null);
+  useEffect(() => { setData(null); setError(''); setDiag(null); window.studio.native(project.id).then(setData).catch(e => setError(e.message)); }, [project.id]);
+  // When an engine is configured but deep analysis did not run, auto-fetch diagnostics so the real
+  // reason (Java path, version) is visible without opening Settings.
+  useEffect(() => { if (data && !data.unavailable && data.opened && !data.engineReady && project.native?.engineConfigured) window.studio.diagnoseEngine().then(setDiag).catch(() => {}); }, [data]);
   if (error) return <section className="card"><p>{error}</p></section>;
   if (!data) return <section className="card"><p className="hint-text">Loading…</p></section>;
   if (data.unavailable) return <section className="card"><p>{data.unavailable}</p></section>;
@@ -29,7 +32,14 @@ export function NativeView({ project, onOpenSettings }) {
         <li>Analyse this file again — you’ll get functions, strings and pseudocode.</li>
       </ol>
       <button className="btn primary" onClick={onOpenSettings}>Open Settings</button>
-      {project.native?.engineConfigured && <p className="inline-error">An engine folder is set, but REA could not use it: {data.engineMessage}. Check the folder and version in Settings (run “rea doctor” if you have the CLI).</p>}
+      {project.native?.engineConfigured && <div className="inline-error" style={{ marginTop: 10 }}>
+        <p>An engine folder is set, but REA could not use it.</p>
+        {diag ? <>
+          <p><strong>Java in use:</strong> {diag.javaHome ?? 'NONE FOUND — install Temurin 21, or set the Java home in Settings'}</p>
+          <p><strong>Ghidra:</strong> {diag.ghidra?.ok ? 'folder OK' : (diag.ghidra?.detail ?? 'not detected')}{diag.ghidra?.remediation ? ` — ${diag.ghidra.remediation}` : ''}</p>
+          <details><summary>Full diagnostics</summary><pre className="raw">{diag.raw}</pre></details>
+        </> : <p className="hint-text">Checking the engine…</p>}
+      </div>}
     </section> : <section className="card">
       <h3>Decompilation</h3>
       <p>Engine ready. Lumen read {sectionKeys.length} section(s): {sectionKeys.join(', ') || 'identification only'}.</p>
