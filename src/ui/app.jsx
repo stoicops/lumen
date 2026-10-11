@@ -6,6 +6,8 @@ import { ArchitectureMap } from './map.jsx';
 import { SecurityView } from './security.jsx';
 import { LicensingView } from './licensing.jsx';
 import { CheckedAnswer } from './answer.jsx';
+import { NativeView } from './native.jsx';
+import { Settings } from './settings.jsx';
 import './style.css';
 
 const STATUS = {
@@ -55,8 +57,8 @@ function DropZone({ busy, status, onPath, onChoose, onCancel }) {
     onDrop={e => { e.preventDefault(); setOver(false); const f = e.dataTransfer.files[0]; if (f) onPath(window.studio.droppedPath(f)); }}>
     {busy ? <div className="spinner" aria-hidden /> : <div className="drop-icon" aria-hidden>⬇︎</div>}
     <div className="drop-text">
-      <strong>{busy ? 'Reading your app…' : 'Drop an app folder or .asar file'}</strong>
-      <span role="status">{busy ? status : 'Lumen reads the files without running them.'}</span>
+      <strong>{busy ? 'Reading your app…' : 'Drop an app, .asar, .exe, Mac app or other binary'}</strong>
+      <span role="status">{busy ? status : 'Lumen identifies it and reads it without running it.'}</span>
     </div>
     {busy ? <button className="btn" onClick={onCancel}>Cancel</button> : <button className="btn" onClick={onChoose}>Choose…</button>}
   </section>;
@@ -171,7 +173,7 @@ function AskPanel({ project, providers, selection, setSelection }) {
 function App() {
   const [projects, setProjects] = useState([]), [project, setProject] = useState(null), [busy, setBusy] = useState(false);
   const [status, setStatus] = useState(''), [error, setError] = useState(null), [providers, setProviders] = useState([]), [selection, setSelection] = useState('');
-  const [tab, setTab] = useState('summary'), [sheet, setSheet] = useState(null), [platform, setPlatform] = useState(''), [copied, setCopied] = useState(false);
+  const [tab, setTab] = useState('summary'), [sheet, setSheet] = useState(null), [platform, setPlatform] = useState(''), [copied, setCopied] = useState(false), [showSettings, setShowSettings] = useState(false);
   const refresh = async () => setProjects(await window.studio.projects());
   const loadModels = async () => {
     const list = await window.studio.models(); setProviders(list);
@@ -200,7 +202,7 @@ function App() {
     <main>
       <header className="toolbar">
         <div className="toolbar-title">{project ? project.name : 'Lumen'}</div>
-        <AiStatus providers={providers} selection={selection} onRefresh={() => loadModels().catch(() => {})} />
+        <div className="toolbar-right"><AiStatus providers={providers} selection={selection} onRefresh={() => loadModels().catch(() => {})} /><button className="icon-btn" title="Settings" aria-label="Settings" onClick={() => setShowSettings(true)}>⚙</button></div>
       </header>
       <div className="content">
         <DropZone busy={busy} status={status} onPath={analyze} onChoose={choose} onCancel={() => window.studio.cancel().catch(e => setError({ message: e.message }))} />
@@ -210,7 +212,7 @@ function App() {
           <div className="project-head">
             <div><h1>{project.name}</h1><span className="meta"><StatusBadge status={project.status} /> {when(project.createdAt)}</span></div>
             <div className="actions">
-              <div className="segmented" role="tablist">
+              <div className="segmented" role="tablist" hidden={project.family && project.family !== 'js'}>
                 <button role="tab" aria-selected={tab === 'summary'} className={tab === 'summary' ? 'on' : ''} onClick={() => setTab('summary')}>Summary</button>
                 <button role="tab" aria-selected={tab === 'map'} className={tab === 'map' ? 'on' : ''} onClick={() => setTab('map')}>Map</button>
                 <button role="tab" aria-selected={tab === 'security'} className={tab === 'security' ? 'on' : ''} onClick={() => setTab('security')}>Security</button>
@@ -223,6 +225,7 @@ function App() {
           </div>
           {project.cleanupWarning && <div className="alert warn">{project.cleanupWarning}</div>}
           {project.resolutionNotes?.length > 0 && <div className="alert note">{project.resolutionNotes.map((n, i) => <p key={i}>{n}</p>)}</div>}
+          {project.family && project.family !== 'js' ? (project.status === 'completed' ? <NativeView project={project} onOpenSettings={() => setShowSettings(true)} /> : <section className="card"><p>Inspection {project.status === 'failed' ? 'failed: ' + (project.error ?? '') : 'is ' + project.status}.</p></section>) : <>
           {tab === 'map' && project.status === 'completed' && <ArchitectureMap projectId={project.id} />}
           {tab === 'map' && project.status !== 'completed' && <section className="card"><p>The map needs a completed analysis.</p></section>}
           <div className="columns" hidden={tab === 'map'}>
@@ -234,10 +237,12 @@ function App() {
             </div>
             <div className="col-side"><AskPanel project={project} providers={providers} selection={selection} setSelection={setSelection} /></div>
           </div>
+          </>}
         </>}
       </div>
     </main>
     {sheet && view && <EvidenceSheet fact={sheet} view={view} onClose={() => setSheet(null)} />}
+    {showSettings && <Settings onClose={() => setShowSettings(false)} />}
   </div>;
 }
 createRoot(document.getElementById('root')).render(<App />);

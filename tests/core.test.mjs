@@ -261,3 +261,31 @@ test('licensing review classifies mechanisms by robustness and gives hardening a
   const empty=await mkdtemp(join(tmpdir(),'lumen-noلic-'));await writeFile(join(empty,'a.js'),'console.log(1)');
   const none=await analyzeLicensing(empty);assert.equal(none.findings.length,0);assert.match(none.summary,/No licensing/);
 });
+test('target identification routes every supported kind from magic bytes and extension',async()=>{
+  const {identify,KINDS}=await import('../src/core/identify.mjs');
+  const {writeFile,mkdir}=await import('node:fs/promises');
+  const dir=await mkdtemp(join(tmpdir(),'lumen-id-'));
+  const w=async(name,bytes)=>{const p=join(dir,name);await writeFile(p,Buffer.isBuffer(bytes)?bytes:Buffer.from(bytes));return p;};
+  const b=(arr,len=64)=>{const buf=Buffer.alloc(len);for(let i=0;i<arr.length;i++)buf[i]=arr[i];return buf;};
+  assert.equal((await identify(await w('a.out',b([0x7f,0x45,0x4c,0x46])))).kind,'elf');
+  assert.equal((await identify(await w('a.exe',b([0x4d,0x5a])))).kind,'pe');
+  assert.equal((await identify(await w('a.dylib',b([0xcf,0xfa,0xed,0xfe])))).kind,'macho');
+  assert.equal((await identify(await w('fat',b([0xca,0xfe,0xba,0xbe])))).kind,'macho-universal');
+  assert.equal((await identify(await w('app.apk',b([0x50,0x4b,0x03,0x04])))).kind,'apk');
+  assert.equal((await identify(await w('data.zip',b([0x50,0x4b,0x03,0x04])))).kind,'zip');
+  assert.equal((await identify(await w('disk.dmg',b([0,0,0,0])))).kind,'dmg');
+  assert.equal((await identify(await w('x.js','const a=1;'))).kind, 'javascript');
+  // .NET: PE with a BSJB CLI metadata signature in the head
+  const net=b([0x4d,0x5a]);Buffer.from('BSJB').copy(net,32);
+  assert.equal((await identify(await w('lib.dll',net))).kind,'dotnet');
+  // a real asar with no .asar extension is still recognised by its Pickle header
+  if(process.env.LUMEN_ASAR)assert.equal((await identify(process.env.LUMEN_ASAR)).kind,'asar');
+  // folder with package.json → electron/js
+  const proj=join(dir,'proj');await mkdir(proj);await writeFile(join(proj,'package.json'),'{}');
+  assert.equal((await identify(proj)).kind,'javascript');
+  const app=join(dir,'My.app','Contents','Resources');await mkdir(app,{recursive:true});await writeFile(join(app,'app.asar'),'x');
+  assert.equal((await identify(join(dir,'My.app'))).kind,'electron-app');
+  // every kind has routing metadata
+  for(const k of Object.keys(KINDS))assert.ok(KINDS[k].family&&KINDS[k].label);
+  assert.equal(KINDS.pe.family,'native');assert.equal(KINDS.javascript.deep,true);
+});

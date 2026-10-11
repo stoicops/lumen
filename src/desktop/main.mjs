@@ -3,6 +3,7 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { realpath, stat, writeFile, copyFile, readFile } from 'node:fs/promises';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { ReaAdapter } from '../core/rea-adapter.mjs';
 import { projectArchitecture } from '../core/graph.mjs';
@@ -10,6 +11,7 @@ import { reviewSecurity } from '../core/security.mjs';
 import { scanTarget } from '../core/secret-scan.mjs';
 import { analyzeLicensing } from '../core/license-scan.mjs';
 import { resolveTarget } from '../core/target.mjs';
+import { identify, KINDS } from '../core/identify.mjs';
 import { ProjectStore, report } from '../core/projects.mjs';
 import { discoverModels, streamChat } from '../core/local-model.mjs';
 import { describeEvidence } from '../core/findings.mjs';
@@ -27,12 +29,17 @@ async function readBundle(id) {
   if (info.size > 64 * 1024 * 1024) return { unavailable: `Evidence bundle is ${Math.round(info.size / 1048576)} MB; views are limited to 64 MB.` };
   return { bundle: JSON.parse(await readFile(file, 'utf8')) };
 }
-let window, store, active;
+let window, store, active, settingsPath;
+function readSettings() { try { return JSON.parse(readFileSync(settingsPath, 'utf8')); } catch { return {}; } }
+function writeSettings(next) { const merged = { ...readSettings(), ...next }; writeFileSync(settingsPath, JSON.stringify(merged, null, 2), { mode: 0o600 }); return merged; }
+// Decompiler-engine locations passed into REA (e.g. GHIDRA_INSTALL_DIR). Only set when configured.
+function engineEnv() { const s = readSettings(); const env = {}; if (typeof s.ghidraDir === 'string' && s.ghidraDir) env.GHIDRA_INSTALL_DIR = s.ghidraDir; return env; }
 function trusted(event) { if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) throw new Error('Untrusted IPC caller'); }
 function handle(name, fn) { ipcMain.handle(name, async (event, ...args) => { trusted(event); return fn(...args); }); }
 // No top-level await before ready: in an ESM main module Electron emits 'ready' only after the
 // module finishes evaluating, so awaiting it at top level deadlocks (window never appears).
 async function start() {
+settingsPath = join(app.getPath('userData'), 'settings.json');
 store = new ProjectStore(join(app.getPath('userData'), 'projects')); await store.recover();
 session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
 session.defaultSession.setPermissionCheckHandler(() => false);
@@ -48,6 +55,10 @@ window.webContents.on('will-navigate', event => event.preventDefault());
 handle('choose', async () => { const result = await dialog.showOpenDialog(window, { title: 'Select JavaScript app folder or ASAR', properties: ['openFile', 'openDirectory'], message: 'Choose an app folder, a Mac .app, or an .asar file' }); return result.canceled ? null : result.filePaths[0]; });
 handle('projects', () => store.list());
 handle('project', id => store.get(id));
+handle('native', async id => { const p = await store.get(id); return p.native ?? { unavailable: 'No native inspection for this analysis.' }; });
+handle('settings', () => readSettings());
+handle('saveSettings', next => { if (!next || typeof next !== 'object') throw new Error('Invalid settings'); const clean = {}; if ('ghidraDir' in next) clean.ghidraDir = typeof next.ghidraDir === 'string' ? next.ghidraDir : ''; return writeSettings(clean); });
+handle('pickFolder', async () => { const r = await dialog.showOpenDialog(window, { title: 'Select your Ghidra install folder', properties: ['openDirectory'] }); return r.canceled ? null : r.filePaths[0]; });
 handle('licensing', async id => { const p = await store.get(id); return p.licensing ?? { unavailable: p.evidence ? 'This analysis was made before licensing review existed. Analyse the app again.' : 'Needs a completed analysis.' }; });
 handle('events', id => { store.path(id); return store.events(id); });
 handle('copyMarkdown', async id => { const project = await store.get(id); clipboard.writeText(report(project, { home: homedir(), security: project.evidence ? await securityFor(id) : null, licensing: project.licensing })); return true; });
@@ -80,10 +91,18 @@ handle('cancel', async () => {
 handle('analyze', async path => {
   if (active) throw new Error('Another analysis is running');
   if (typeof path !== 'string' || !path || path.length > 4096 || path !== resolve(path)) throw new Error('Select an absolute local target path');
-  const resolved = await resolveTarget(await realpath(path));
+  const real = await realpath(path);
+  // Identify first so we route natives (.exe/Mach-O/ELF/APK/.NET) to inspection and JS/Electron to deep analysis.
+  const topKind = (await identify(real)).kind;
+  const family = KINDS[topKind]?.family ?? 'unknown';
+  const resolved = family === 'js' || family === 'container' || family === 'unknown' ? await resolveTarget(real) : { target: real, kind: topKind, notes: [] };
   const target = resolved.target;
+  // The resolved target may differ (e.g. .app → inner app.asar); re-identify it for the stored kind.
+  const kind = resolved.target === real ? topKind : (await identify(resolved.target)).kind;
   const project = await store.create(target);
-  project.source = path; project.resolution = resolved.kind; project.resolutionNotes = resolved.notes; const adapter = new ReaAdapter(); const controller = new AbortController();
+  project.source = path; project.resolution = resolved.kind; project.resolutionNotes = resolved.notes;
+  project.kind = kind; project.family = KINDS[kind]?.family ?? 'unknown';
+  const adapter = new ReaAdapter({ extraEnv: engineEnv() }); const controller = new AbortController();
   let finished; active = { controller, adapter, project, done: new Promise(r => { finished = r; }) };
   project.status = 'running'; project.startedAt = new Date().toISOString(); await store.save(project);
   const progress = value => { if (value.message) store.event(project.id, 'progress', value.message); const update = { projectId: project.id, ...value }; if (!window.isDestroyed()) window.webContents.send('progress', update); };
@@ -92,20 +111,21 @@ handle('analyze', async path => {
     progress({ message: 'Connecting to local REA engine' });
     project.engine = await adapter.connect({ signal: controller.signal });
     if (controller.signal.aborted) throw new Error('Cancelled before analysis');
-    project.evidence = await adapter.analyze(target, { signal: controller.signal, onprogress: progress });
-    if (controller.signal.aborted) throw new Error('Cancelled before export');
-    progress({ message: 'Saving complete evidence bundle' });
-    await adapter.export(join(store.path(project.id), 'evidence.json'), { signal: controller.signal });
-    progress({ message: 'Checking the files for exposed keys' });
-    project.secrets = await scanWithoutAsarShim(scanTarget, target, controller.signal).catch(error => {
-      if (controller.signal.aborted) throw error;
-      return { error: String(error.message ?? error) };
-    });
-    progress({ message: 'Looking at how licensing is enforced' });
-    project.licensing = await scanWithoutAsarShim(analyzeLicensing, target, controller.signal).catch(error => {
-      if (controller.signal.aborted) throw error;
-      return { error: String(error.message ?? error) };
-    });
+    if (project.family === 'js') {
+      project.evidence = await adapter.analyze(target, { signal: controller.signal, onprogress: progress });
+      if (controller.signal.aborted) throw new Error('Cancelled before export');
+      progress({ message: 'Saving complete evidence bundle' });
+      await adapter.export(join(store.path(project.id), 'evidence.json'), { signal: controller.signal });
+      progress({ message: 'Checking the files for exposed keys' });
+      project.secrets = await scanWithoutAsarShim(scanTarget, target, controller.signal).catch(error => { if (controller.signal.aborted) throw error; return { error: String(error.message ?? error) }; });
+      progress({ message: 'Looking at how licensing is enforced' });
+      project.licensing = await scanWithoutAsarShim(analyzeLicensing, target, controller.signal).catch(error => { if (controller.signal.aborted) throw error; return { error: String(error.message ?? error) }; });
+    } else {
+      // Native / managed / android: identify and inspect. Deep decompilation needs an installed engine.
+      progress({ message: `Inspecting ${KINDS[project.kind]?.label ?? 'binary'}` });
+      project.native = await adapter.inspectNative(target, { signal: controller.signal });
+      project.native.engineConfigured = Boolean(engineEnv().GHIDRA_INSTALL_DIR);
+    }
     outcome = controller.signal.aborted ? 'cancelled' : 'completed';
   } catch (error) { outcome = controller.signal.aborted ? 'cancelled' : 'failed'; if (outcome === 'failed') project.error = String(error.message ?? error); }
   finally {
@@ -114,7 +134,7 @@ handle('analyze', async path => {
     if (!project.cleanup.verified) project.cleanupWarning = `Engine cleanup not confirmed: ${project.cleanup.reason ?? 'unknown'}. Check for leftover REA processes before retrying.`;
     // A cancellation is only reported as `cancelled` once the engine is confirmed stopped.
     project.status = outcome === 'cancelled' && !project.cleanup.verified ? 'cancelling' : outcome;
-    if (outcome === 'cancelled') { project.evidence = undefined; project.secrets = undefined; project.licensing = undefined; } // never expose a partial result after cancel
+    if (outcome === 'cancelled') { project.evidence = undefined; project.secrets = undefined; project.licensing = undefined; project.native = undefined; } // never expose a partial result after cancel
     project.finishedAt = new Date().toISOString();
     active = null; await store.save(project); store.event(project.id, project.status, project.error ?? (project.cleanup?.verified ? 'Engine stopped (verified)' : project.cleanup?.reason)); finished();
   }

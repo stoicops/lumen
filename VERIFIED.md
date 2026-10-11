@@ -104,3 +104,11 @@ User reported "all works" after pulling the map, security and checked-answer cha
 
 - analyzeLicensing classifies mechanisms by robustness with how-it-works/weakness/harden, redacts keys. Electron run on a demo .asar: 6 findings (2 trivial, 4 weak). docs/screenshots/10-licensing.png.
 - visitTextFiles shared by secret + licensing scans (read-only, bounded, .asar-aware). npm test: 19 passed.
+
+## Universal target identification + native inspection + decompiler-engine wiring
+
+- src/core/identify.mjs: magic-byte + extension triage → ELF/PE/Mach-O(+universal)/.NET/APK/ZIP/DMG/ASAR/Electron/JS. Tested against crafted headers and the real demo .asar (20th test).
+- Adapter: NATIVE_READ allow-list (read-only; no execution/capture/mutation), extraEnv passthrough (GHIDRA_INSTALL_DIR), inspectNative() orchestrator with soft tryCall. Real ELF under REA: opened + identified (elf/x86_64/executable/sha256), binary_overview → provider_unavailable → engineReady:false (honest), cleanup verified.
+- main.mjs routes family: js → deep analysis + scans; native/managed/android → inspectNative. Settings store (userData/settings.json) → GHIDRA_INSTALL_DIR. IPC: native/settings/saveSettings/pickFolder.
+- UI: NativeView (identity + signature/layout sections + "engine needed" panel with steps) and Settings modal (Ghidra folder picker + in-app install guide, Java 21 / Ghidra 12.1.4). Electron run on a real ELF: native view + engine panel + Settings all render (docs/screenshots/11,12).
+- Ghidra discovery confirmed from rea-agents: env GHIDRA_INSTALL_DIR (absolute), verified build 12.1.4, Java 21, `rea doctor`. Deep decompile NOT verified here (Ghidra not installed); verify on the user's Mac after install. Hopper/JEB supported-if-present, never bundled (project rule).

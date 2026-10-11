@@ -229,3 +229,16 @@ svg.map:active { cursor: grabbing; }
 .lic p { margin: 4px 0; font-size: 13px; }
 .lic-snippet { font: 11.5px var(--mono); background: var(--bg-2); border-radius: 6px; padding: 6px 8px; margin: 4px 0; overflow-x: auto; white-space: pre; color: var(--text-2); }
 .lic-harden { color: var(--text); background: var(--accent-soft); padding: 6px 8px; border-radius: 6px; }
+
+/* Settings + native */
+.toolbar-right { display: flex; gap: 8px; align-items: center; -webkit-app-region: no-drag; }
+.icon-btn { border: 1px solid var(--line-2); background: var(--card); border-radius: 7px; width: 30px; height: 28px; font-size: 14px; cursor: default; color: var(--text); }
+.icon-btn:hover { background: var(--bg-2); }
+.sheet.wide { width: min(640px, 94vw); }
+.sheet h4 { margin: 14px 0 4px; font-size: 13px; }
+.row-inline { display: flex; gap: 8px; } .row-inline input { flex: 1; }
+.kv-list { display: grid; grid-template-columns: 140px 1fr; gap: 6px 12px; margin: 8px 0; }
+.kv-list dt { color: var(--text-2); } .kv-list dd { margin: 0; overflow-wrap: anywhere; font-family: var(--mono); font-size: 12px; }
+.engine-needed { border: 1px solid var(--accent); }
+
+.segmented[hidden] { display: none; }
