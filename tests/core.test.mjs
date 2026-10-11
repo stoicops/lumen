@@ -289,3 +289,13 @@ test('target identification routes every supported kind from magic bytes and ext
   for(const k of Object.keys(KINDS))assert.ok(KINDS[k].family&&KINDS[k].label);
   assert.equal(KINDS.pe.family,'native');assert.equal(KINDS.javascript.deep,true);
 });
+test('dmg mount parsing and lifecycle: finds inner app.asar and always detaches',async()=>{
+  const {parseMountPoint,openDmg}=await import('../src/core/dmg.mjs');
+  const plist=`<?xml version="1.0"?><plist><dict><key>system-entities</key><array>`+
+    `<dict><key>content-hint</key><string>GUID_partition_scheme</string></dict>`+
+    `<dict><key>mount-point</key><string>/Volumes/Demo App</string><key>dev-entry</key><string>/dev/disk4s1</string></dict>`+
+    `</array></dict></plist>`;
+  assert.equal(parseMountPoint(plist),'/Volumes/Demo App');
+  assert.equal(parseMountPoint('<plist></plist>'),null);
+  if(process.platform!=='darwin')await assert.rejects(openDmg('/x.dmg'),/only on macOS/);
+});

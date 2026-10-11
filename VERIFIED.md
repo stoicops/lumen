@@ -112,3 +112,7 @@ User reported "all works" after pulling the map, security and checked-answer cha
 - main.mjs routes family: js → deep analysis + scans; native/managed/android → inspectNative. Settings store (userData/settings.json) → GHIDRA_INSTALL_DIR. IPC: native/settings/saveSettings/pickFolder.
 - UI: NativeView (identity + signature/layout sections + "engine needed" panel with steps) and Settings modal (Ghidra folder picker + in-app install guide, Java 21 / Ghidra 12.1.4). Electron run on a real ELF: native view + engine panel + Settings all render (docs/screenshots/11,12).
 - Ghidra discovery confirmed from rea-agents: env GHIDRA_INSTALL_DIR (absolute), verified build 12.1.4, Java 21, `rea doctor`. Deep decompile NOT verified here (Ghidra not installed); verify on the user's Mac after install. Hopper/JEB supported-if-present, never bundled (project rule).
+
+## .dmg auto-mount (macOS)
+
+- src/core/dmg.mjs: hdiutil attach -readonly -nobrowse; parse mount-point from -plist; recursively find a top-level .app/Contents/Resources/app.asar; always detach (-force) in finally. Wired into the job: dmg → mount → analyse inner app.asar as a normal Electron app → detach. Parser + non-macOS guard unit-tested (21 tests). Real mount is macOS-only, unverified here.

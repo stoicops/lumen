@@ -12,6 +12,7 @@ import { scanTarget } from '../core/secret-scan.mjs';
 import { analyzeLicensing } from '../core/license-scan.mjs';
 import { resolveTarget } from '../core/target.mjs';
 import { identify, KINDS } from '../core/identify.mjs';
+import { openDmg } from '../core/dmg.mjs';
 import { ProjectStore, report } from '../core/projects.mjs';
 import { discoverModels, streamChat } from '../core/local-model.mjs';
 import { describeEvidence } from '../core/findings.mjs';
@@ -103,32 +104,40 @@ handle('analyze', async path => {
   project.source = path; project.resolution = resolved.kind; project.resolutionNotes = resolved.notes;
   project.kind = kind; project.family = KINDS[kind]?.family ?? 'unknown';
   const adapter = new ReaAdapter({ extraEnv: engineEnv() }); const controller = new AbortController();
-  let finished; active = { controller, adapter, project, done: new Promise(r => { finished = r; }) };
+  let finished, dmg = null; active = { controller, adapter, project, done: new Promise(r => { finished = r; }) };
   project.status = 'running'; project.startedAt = new Date().toISOString(); await store.save(project);
   const progress = value => { if (value.message) store.event(project.id, 'progress', value.message); const update = { projectId: project.id, ...value }; if (!window.isDestroyed()) window.webContents.send('progress', update); };
   let outcome;
   try {
+    let analysisTarget = target;
+    if (project.kind === 'dmg') {
+      progress({ message: 'Mounting the disk image' });
+      dmg = await openDmg(target, { signal: controller.signal });
+      analysisTarget = dmg.asar; project.family = 'js'; project.kind = 'asar';
+      project.resolutionNotes = [...(project.resolutionNotes ?? []), 'Mounted the disk image and found the app inside it.'];
+    }
     progress({ message: 'Connecting to local REA engine' });
     project.engine = await adapter.connect({ signal: controller.signal });
     if (controller.signal.aborted) throw new Error('Cancelled before analysis');
     if (project.family === 'js') {
-      project.evidence = await adapter.analyze(target, { signal: controller.signal, onprogress: progress });
+      project.evidence = await adapter.analyze(analysisTarget, { signal: controller.signal, onprogress: progress });
       if (controller.signal.aborted) throw new Error('Cancelled before export');
       progress({ message: 'Saving complete evidence bundle' });
       await adapter.export(join(store.path(project.id), 'evidence.json'), { signal: controller.signal });
       progress({ message: 'Checking the files for exposed keys' });
-      project.secrets = await scanWithoutAsarShim(scanTarget, target, controller.signal).catch(error => { if (controller.signal.aborted) throw error; return { error: String(error.message ?? error) }; });
+      project.secrets = await scanWithoutAsarShim(scanTarget, analysisTarget, controller.signal).catch(error => { if (controller.signal.aborted) throw error; return { error: String(error.message ?? error) }; });
       progress({ message: 'Looking at how licensing is enforced' });
-      project.licensing = await scanWithoutAsarShim(analyzeLicensing, target, controller.signal).catch(error => { if (controller.signal.aborted) throw error; return { error: String(error.message ?? error) }; });
+      project.licensing = await scanWithoutAsarShim(analyzeLicensing, analysisTarget, controller.signal).catch(error => { if (controller.signal.aborted) throw error; return { error: String(error.message ?? error) }; });
     } else {
       // Native / managed / android: identify and inspect. Deep decompilation needs an installed engine.
       progress({ message: `Inspecting ${KINDS[project.kind]?.label ?? 'binary'}` });
-      project.native = await adapter.inspectNative(target, { signal: controller.signal });
+      project.native = await adapter.inspectNative(analysisTarget, { signal: controller.signal });
       project.native.engineConfigured = Boolean(engineEnv().GHIDRA_INSTALL_DIR);
     }
     outcome = controller.signal.aborted ? 'cancelled' : 'completed';
   } catch (error) { outcome = controller.signal.aborted ? 'cancelled' : 'failed'; if (outcome === 'failed') project.error = String(error.message ?? error); }
   finally {
+    if (dmg) { try { await dmg.detach(); } catch {} }
     if (controller.signal.aborted) progress({ message: 'Stopping engine and confirming cleanup' });
     try { project.cleanup = await adapter.close(); } catch (error) { project.cleanup = { verified: false, reason: String(error.message ?? error) }; }
     if (!project.cleanup.verified) project.cleanupWarning = `Engine cleanup not confirmed: ${project.cleanup.reason ?? 'unknown'}. Check for leftover REA processes before retrying.`;
