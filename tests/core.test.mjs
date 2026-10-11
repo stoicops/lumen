@@ -155,3 +155,25 @@ test('security review flags risky window settings and unchecked IPC from REA fac
   assert.ok(tt.some(x=>x.startsWith('medium:Page API “greetings” exposes general-purpose functions')));
   assert.equal(rr.findings[0].severity,'high');
 });
+test('grounded chat: numbered facts, scope notes kept apart, and each answer line checked',async()=>{
+  const {buildContext,checkAnswer,GROUNDED_SYSTEM_PROMPT}=await import('../src/core/grounding.mjs');
+  const {describeEvidence}=await import('../src/core/findings.mjs');const {projectArchitecture}=await import('../src/core/graph.mjs');const {reviewSecurity}=await import('../src/core/security.mjs');
+  const fs=await import('node:fs/promises');
+  const bundle=JSON.parse(await fs.readFile(new URL('./fixtures/simple-app-bundle.json',import.meta.url)));
+  const summary=JSON.parse(await fs.readFile(new URL('./fixtures/summary-evidence.json',import.meta.url)));
+  const ctx=buildContext({view:describeEvidence(summary),map:projectArchitecture(bundle),security:reviewSecurity({bundle,summary})});
+  const win=ctx.facts.find(f=>f.text.startsWith('Browser windows created: 1'));assert.ok(win);
+  assert.ok(ctx.facts.some(f=>f.id.startsWith('L')&&f.text.includes('sends messages to')));
+  assert.ok(ctx.facts.some(f=>f.id.startsWith('S')&&f.text.includes('sender')));
+  assert.match(ctx.text,/NOT features of the app/);assert.ok(!/\[F\d+\][^\n]*call-flow/.test(ctx.text),'area names are not facts');
+  assert.match(GROUNDED_SYSTEM_PROMPT,/cite/);
+  const answer=[`This app has one main window [${win.id}].`,'The app uses workers and storage to sync files in the background.',`It has 7 windows [${win.id}].`,'It talks to a cloud database [F999].','The evidence does not show this.'].join('\n');
+  const c=checkAnswer(answer,ctx.facts);
+  assert.deepEqual(c.lines.map(l=>l.status),['supported','uncited','mismatch','invalid','no-claim']);
+  assert.deepEqual(c.lines[2].unmatched,['7']);
+  assert.equal(c.supported,1);assert.equal(c.uncited,1);assert.equal(c.invalid,1);assert.equal(c.mismatch,1);
+});
+test('desktop entry files parse (main process and preload)',async()=>{
+  const {execFileSync}=await import('node:child_process');
+  for(const f of ['src/desktop/main.mjs','src/desktop/preload.cjs'])execFileSync(process.execPath,['--check',f]);
+});

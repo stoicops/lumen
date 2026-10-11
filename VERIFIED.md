@@ -82,3 +82,10 @@ Observed problems: (a) answer shows raw markdown (`**`) because output is render
 - src/core/secret-scan.mjs: Lumen's own read-only pattern scan (folders + raw .asar parsing; no symlinks, bounded files/bytes/header, out-of-archive offsets rejected, masked values only). Runs after export during analysis; inside Electron it reads with process.noAsar.
 - Tests: 13 passed (keys built at runtime, never committed; malformed .asar rejected).
 - Real Electron (Xvfb): planted AWS-format key in an .asar found at main.js:6, displayed masked; unchecked IPC handler flagged. docs/screenshots/7-security.png.
+
+## Evidence-grounded AI answers (item 4, partial)
+
+- src/core/grounding.mjs: model gets a numbered fact list ([F] findings, [L] map links, [S] security), bounded to 24k chars with omitted count; REA coverage area names are passed as labelled scope notes, not facts. Each answer line is checked: supported / no source / invalid citation / number mismatch.
+- Real Electron + fake OpenAI-compatible server on 127.0.0.1:11434: planted answer scored "4 of 7 claims cite real evidence. 1 has no source. 1 cites a fact that doesn't exist. 1 has a number that doesn't match." docs/screenshots/8-checked-answer.png. Not yet run against a real model on the Mac.
+- npm test: 15 passed (adds syntax check of main/preload after a slip broke the main file during this change; caught by the Electron run before commit).
+- Limits: checking is mechanical; a cited claim can still misread its fact. Still single-turn, non-streaming, conversations not saved.

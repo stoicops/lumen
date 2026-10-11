@@ -4,6 +4,7 @@ import { describeEvidence, friendlyError } from '../core/findings.mjs';
 import { Markdown } from './markdown.jsx';
 import { ArchitectureMap } from './map.jsx';
 import { SecurityView } from './security.jsx';
+import { CheckedAnswer } from './answer.jsx';
 import './style.css';
 
 const STATUS = {
@@ -121,7 +122,7 @@ function AskPanel({ project, providers, selection, setSelection }) {
   const options = providers.flatMap(p => p.models.map(m => ({ key: JSON.stringify([p.endpoint, m]), label: `${p.name} · ${m}` })));
   async function ask() {
     setAsking(true); setError('');
-    try { const [endpoint, model] = JSON.parse(selection); const r = await window.studio.ask({ projectId: project.id, endpoint, model, question }); setAnswer({ text: r.answer, model: r.model }); }
+    try { const [endpoint, model] = JSON.parse(selection); const r = await window.studio.ask({ projectId: project.id, endpoint, model, question }); setAnswer(r); }
     catch (e) { setError(e.message); } finally { setAsking(false); }
   }
   return <section className="card ask">
@@ -133,11 +134,7 @@ function AskPanel({ project, providers, selection, setSelection }) {
       onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && selection && question.trim()) ask(); }} />
     <button className="btn primary" disabled={asking || !selection || !question.trim() || !project.evidence} onClick={ask}>{asking ? 'Thinking…' : 'Ask'}</button>
     {error && <p className="inline-error" role="alert">{error}</p>}
-    {answer && <div className="answer">
-      <div className="answer-head"><span className="tag ai">AI answer · not verified</span><span className="meta">{answer.model}</span></div>
-      <Markdown text={answer.text} />
-      <p className="hint-text">AI can be wrong or overstate things. Check claims against “What REA found”.</p>
-    </div>}
+    {answer && <CheckedAnswer answer={answer} />}
   </section>;
 }
 

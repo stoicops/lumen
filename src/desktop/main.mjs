@@ -9,7 +9,9 @@ import { projectArchitecture } from '../core/graph.mjs';
 import { reviewSecurity } from '../core/security.mjs';
 import { scanTarget } from '../core/secret-scan.mjs';
 import { ProjectStore, report } from '../core/projects.mjs';
-import { discoverModels, askEvidence } from '../core/local-model.mjs';
+import { discoverModels, askGrounded } from '../core/local-model.mjs';
+import { describeEvidence } from '../core/findings.mjs';
+import { buildContext, checkAnswer, GROUNDED_SYSTEM_PROMPT } from '../core/grounding.mjs';
 const here = dirname(fileURLToPath(import.meta.url));
 // Electron's fs treats .asar files as folders; the key scan must read the raw archive bytes.
 async function scanWithoutAsarShim(target, signal) {
@@ -110,8 +112,11 @@ handle('analyze', async path => {
 handle('ask', async input => {
   if (!input || typeof input !== 'object') throw new Error('Invalid chat request');
   const project = await store.get(input.projectId);
-  if (!project.evidence) throw new Error('Analyze an app first');
-  return askEvidence({ endpoint: input.endpoint, model: input.model, question: input.question, evidence: project.evidence });
+  if (!project.evidence) throw new Error('Analyse an app first');
+  const { bundle } = await readBundle(project.id);
+  const context = buildContext({ view: describeEvidence(project.evidence), map: bundle ? projectArchitecture(bundle) : null, security: await securityFor(project.id) });
+  const result = await askGrounded({ endpoint: input.endpoint, model: input.model, question: input.question, context: context.text, systemPrompt: GROUNDED_SYSTEM_PROMPT });
+  return { ...result, check: checkAnswer(result.answer, context.facts), facts: context.facts.map(({ id, text }) => ({ id, text })), omitted: context.omitted };
 });
 handle('export', async id => {
   const project = await store.get(id);

@@ -28,3 +28,14 @@ export async function askEvidence({ endpoint, model, question, evidence, signal 
   if (typeof answer !== 'string') throw new Error('Model returned no answer');
   return { answer, label: 'AI explanation • check against evidence', model };
 }
+// Grounded variant: the model sees a numbered fact list (see grounding.mjs) and must cite IDs.
+export async function askGrounded({ endpoint, model, question, context, systemPrompt, signal }) {
+  if (typeof model !== 'string' || !model || typeof question !== 'string' || !question.trim() || question.length > 8000) throw new Error('Select a model and enter a question under 8,000 characters');
+  const body = await request(endpoint, '/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: signal ?? AbortSignal.timeout(180000), body: JSON.stringify({ model, temperature: 0.1, stream: false, messages: [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: `UNTRUSTED ANALYSIS DATA:\n${context}\nEND DATA\n\nQuestion: ${question}` }
+  ] }) });
+  const answer = body.choices?.[0]?.message?.content;
+  if (typeof answer !== 'string') throw new Error('Model returned no answer');
+  return { answer, model };
+}
