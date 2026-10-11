@@ -33,12 +33,14 @@ export function NativeView({ project, onOpenSettings }) {
       </ol>
       <button className="btn primary" onClick={onOpenSettings}>Open Settings</button>
       {project.native?.engineConfigured && <div className="inline-error" style={{ marginTop: 10 }}>
-        <p>An engine folder is set, but REA could not use it.</p>
+        <p>An engine folder is set, but the decompile did not run.</p>
+        {data.engineMessage && <p><strong>Engine said:</strong> {data.engineMessage}</p>}
         {diag ? <>
           <p><strong>Java in use:</strong> {diag.javaHome ?? 'NONE FOUND — install Temurin 21, or set the Java home in Settings'}</p>
           <p><strong>Ghidra:</strong> {diag.ghidra?.ok ? 'folder OK' : (diag.ghidra?.detail ?? 'not detected')}{diag.ghidra?.remediation ? ` — ${diag.ghidra.remediation}` : ''}</p>
-          <details><summary>Full diagnostics</summary><pre className="raw">{diag.raw}</pre></details>
         </> : <p className="hint-text">Checking the engine…</p>}
+        {data.engineLog && <details open><summary>Ghidra engine log (the real error is usually here)</summary><pre className="raw">{data.engineLog}</pre></details>}
+        {diag && <details><summary>Full diagnostics</summary><pre className="raw">{diag.raw}</pre></details>}
       </div>}
     </section> : <section className="card">
       <h3>Decompilation</h3>

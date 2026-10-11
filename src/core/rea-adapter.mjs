@@ -51,8 +51,10 @@ export class ReaAdapter {
     const { command, args } = this.launch ?? this.defaultLaunch();
     this.client = new Client({ name: 'lumen-local-studio', version: '0.1.0' });
     this.transport = new StdioClientTransport({ command, args, env: { ...process.env, ...this.extraEnv, ELECTRON_RUN_AS_NODE: '1', ELECTRON_NO_ASAR: '1' }, stderr: 'pipe' });
-    // Consume stderr without persisting potentially sensitive target paths.
-    this.transport.stderr?.on('data', () => {});
+    // Keep a bounded tail of engine stderr so a runtime failure (e.g. Ghidra's headless analyzer) can
+    // be surfaced to the user. Bounded to 8 KB; only shown in the engine-error context.
+    this.stderrTail = '';
+    this.transport.stderr?.on('data', chunk => { this.stderrTail = (this.stderrTail + chunk.toString('utf8')).slice(-8192); });
     const handshake = (async () => {
       await this.client.connect(this.transport);
       const catalog = await this.client.listTools();
@@ -109,7 +111,9 @@ export class ReaAdapter {
     // list_strings / list_procedures can be tens of MB, which over IPC can blank the renderer. Detailed
     // listings are fetched on demand later, not bundled into the project record.
     if (engineReady) sections.overview = cap(overview.data);
-    return { opened: true, identity, engineReady, engineMessage: engineReady ? null : overview.message, sections };
+    // On engine failure, include the recent engine stderr tail — it usually names the real Ghidra error.
+    const engineLog = !engineReady && providerId ? this.stderrTail?.slice(-4000) ?? null : null;
+    return { opened: true, identity, engineReady, engineMessage: engineReady ? null : overview.message, engineLog, sections };
   }
   export(path, options) { return this.call('export_evidence_bundle', { path, overwrite: false }, options); }
   // Returns a cleanup record; `verified` is true only when the owned process and every enumerated descendant are gone.
