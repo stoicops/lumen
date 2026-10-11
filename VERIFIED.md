@@ -42,3 +42,5 @@ Limits: descendant enumeration uses /proc and is Linux-only. On macOS/Windows th
 | npm run verify:rea | **Real analysis + bundle export PASSED on macOS.** Cleanup reported unverified: REA exited gracefully with no survivors, but descendants were not enumerable on macOS. |
 
 Fix: descendant listing on macOS/other POSIX now uses the system process table (`/bin/ps -A -o pid=,ppid=`, fixed path, no shell, bounded), and the snapshot is taken before asking the engine to close. The ps path is unit-tested on Linux (7/7 pass); awaiting a macOS rerun. Windows remains "not enumerable" → unverified.
+
+| macOS rerun after ps fix (commit b8dfe9d) | **PASSED**: analysis + export, cleanup `{"method":"graceful","verified":true,"descendantsChecked":0,"survivors":[]}`. |

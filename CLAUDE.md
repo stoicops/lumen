@@ -22,7 +22,7 @@ Read docs/REQUIREMENTS.md, docs/UPSTREAM-NOTES.md and README.md first. User: Sur
 
 ## Material limitations / next actions in order
 
-1. DONE (core, see VERIFIED.md): bounded/abortable connect, owned PID tracking, verified process-tree cleanup (src/core/process-cleanup.mjs), `cancelling` persisted until cleanup confirmed, quit waits up to 15 s. macOS descendant listing via /bin/ps added (awaiting Mac rerun). REMAINING: Windows enumeration; exercise cancel/quit in a running Electron app on the user's Mac.
+1. DONE (core, see VERIFIED.md): bounded/abortable connect, owned PID tracking, verified process-tree cleanup (src/core/process-cleanup.mjs), `cancelling` persisted until cleanup confirmed, quit waits up to 15 s. macOS descendant listing via /bin/ps VERIFIED on the user's Mac. REMAINING: Windows enumeration; exercise cancel/quit in a running Electron app on the user's Mac.
 2. Only atomic JSON metadata is durable, not a full persistent queue. Replace with SQLite transactions/migrations when adding multiple jobs. Persist progress events and completion timestamps. Handle corrupt records visibly; current list skips them.
 3. The UI shows engine summary JSON, not a visual architecture map or a friendly findings list. Build projections from actual bundle schema with fixtures. Preserve parent_evidence_id, provenance and limitations. Never fabricate graph nodes or evidence confidence.
 4. Chat is single-turn, non-streaming and summary-only. Add bounded context retrieval, streaming/cancel, conversations and citation validation. Label model references as unverified until resolved against retained facts. AI prompt instructions alone do not guarantee grounding.
