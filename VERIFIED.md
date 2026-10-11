@@ -169,3 +169,7 @@ User reported "all works" after pulling the map, security and checked-answer cha
 ## Realistic available-memory estimate (macOS vm_stat)
 
 - The guard correctly caught the real cause: only ~1 GB free on a 16 GB Mac (Ollama model + Chrome + Electron), which is why launching Ghidra blanked the display. But os.freemem() understates usable RAM on macOS (reclaimable caches), so the guard would block even after freeing apps. availableMemGiB() now parses vm_stat (free+inactive+speculative+purgeable) for a realistic figure; fallback os.freemem() elsewhere. Used by the on-demand decompile guard.
+
+## Windows build
+
+- Verified `electron-builder --win --dir` on Linux (no Wine) produces release/win-unpacked/Lumen.exe (~430 MB, rea-agents unpacked beside the asar). Needs signAndEditExecutable:false to skip the Wine-only rcedit step. Could not deliver the 173 MB zip (30 MB channel cap). Committed config builds an NSIS installer on the user Windows PC via `npm run dist:win` (oneClick:false, choose install dir). On Windows: process-cleanup descendants = not enumerable (cleanup reported unverified but engine still closed); .app/dmg/java_home auto-detect are macOS-only no-ops; 64 GB RAM clears the memory guard.

@@ -87,11 +87,18 @@
             "x64"
           ]
         }
-      ]
+      ],
+      "signAndEditExecutable": false,
+      "executableName": "Lumen"
     },
     "directories": {
       "output": "release",
       "buildResources": "build"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false
     }
   }
 }
