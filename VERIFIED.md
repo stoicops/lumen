@@ -127,3 +127,8 @@ User reported "all works" after pulling the map, security and checked-answer cha
 - build config in package.json: productName Lumen, mac dmg+zip (arm64+x64), win nsis, linux AppImage. CRITICAL: asarUnpack node_modules/** so REA (a spawned subprocess) and its deps are real files on disk; adapter rewrites the engine path app.asar→app.asar.unpacked.
 - Verified in container: `npm run pack` produced release/linux-unpacked; launched the PACKAGED binary headless and analysed the demo .asar → status completed, evidence produced, engine ran from unpacked path. (First attempt failed with only rea-agents unpacked — "Connection closed" — fixed by unpacking all node_modules.)
 - macOS .dmg/.exe and signing must be built on the user's own Mac/Windows; see docs/BUILDING.md. Icon is build/icon.svg (default Electron icon until a PNG/icns is added).
+
+## In-app engine diagnostics ("Check engine")
+
+- Settings → Check engine runs `rea doctor --json` (fixed script path, engineEnv applied, bounded) and shows whether Ghidra is usable, with REA's own remediation and full diagnostics. Verified in-container: reports "GHIDRA_INSTALL_DIR is not set" + remediation (honest, no engine here).
+- This is what the user needs on their Mac: after pointing at Ghidra, Check engine will name the real blocker (missing Java 21, version mismatch, etc.).

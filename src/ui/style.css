@@ -242,3 +242,6 @@ svg.map:active { cursor: grabbing; }
 .engine-needed { border: 1px solid var(--accent); }
 
 .segmented[hidden] { display: none; }
+.diag { margin-top: 12px; padding: 10px 12px; border-radius: 8px; }
+.diag.ok { background: var(--green-soft); } .diag.bad { background: var(--orange-soft); }
+.diag p { margin: 0 0 4px; } .diag pre { max-height: 240px; }

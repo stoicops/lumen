@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('studio', Object.freeze({
   settings: () => ipcRenderer.invoke('settings'),
   saveSettings: next => ipcRenderer.invoke('saveSettings', next),
   pickFolder: () => ipcRenderer.invoke('pickFolder'),
+  diagnoseEngine: () => ipcRenderer.invoke('diagnoseEngine'),
   remove: id => ipcRenderer.invoke('delete', id),
   architecture: id => ipcRenderer.invoke('map', id),
   security: id => ipcRenderer.invoke('security', id),

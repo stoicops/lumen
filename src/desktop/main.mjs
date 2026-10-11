@@ -1,9 +1,11 @@
 import { app, BrowserWindow, ipcMain, dialog, session, clipboard } from 'electron';
 import { homedir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { realpath, stat, writeFile, copyFile, readFile } from 'node:fs/promises';
 import { readFileSync, writeFileSync } from 'node:fs';
+import { execFile } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { randomUUID } from 'node:crypto';
 import { ReaAdapter } from '../core/rea-adapter.mjs';
 import { projectArchitecture } from '../core/graph.mjs';
@@ -34,6 +36,17 @@ let window, store, active, settingsPath;
 function readSettings() { try { return JSON.parse(readFileSync(settingsPath, 'utf8')); } catch { return {}; } }
 function writeSettings(next) { const merged = { ...readSettings(), ...next }; writeFileSync(settingsPath, JSON.stringify(merged, null, 2), { mode: 0o600 }); return merged; }
 // Decompiler-engine locations passed into REA (e.g. GHIDRA_INSTALL_DIR). Only set when configured.
+const reaScript = () => { const require = createRequire(import.meta.url); let s = join(dirname(require.resolve('rea-agents/package.json')), 'scripts', 'rea.mjs'); return s.replace(`app.asar${sep}`, `app.asar.unpacked${sep}`); };
+// Runs REA's own diagnostics for the configured engine. Fixed script path, no shell, bounded.
+function diagnoseEngine() {
+  return new Promise(resolve => {
+    execFile(process.execPath, [reaScript(), 'doctor', '--json'], { timeout: 60000, maxBuffer: 8 * 1024 * 1024, env: { ...process.env, ...engineEnv(), ELECTRON_RUN_AS_NODE: '1' } }, (err, stdout) => {
+      let report; try { report = JSON.parse(stdout); } catch { report = null; }
+      const ghidra = report?.scope_checks?.find(c => c.name === 'ghidra') ?? report?.providerInspections?.find(p => p.id === 'ghidra');
+      resolve({ ok: Boolean(report), ghidra: ghidra ?? null, checks: report?.scope_checks ?? [], raw: stdout?.slice(0, 20000) ?? String(err?.message ?? 'no output') });
+    });
+  });
+}
 function engineEnv() { const s = readSettings(); const env = {}; if (typeof s.ghidraDir === 'string' && s.ghidraDir) env.GHIDRA_INSTALL_DIR = s.ghidraDir; return env; }
 function trusted(event) { if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) throw new Error('Untrusted IPC caller'); }
 function handle(name, fn) { ipcMain.handle(name, async (event, ...args) => { trusted(event); return fn(...args); }); }
@@ -59,6 +72,7 @@ handle('project', id => store.get(id));
 handle('native', async id => { const p = await store.get(id); return p.native ?? { unavailable: 'No native inspection for this analysis.' }; });
 handle('settings', () => readSettings());
 handle('saveSettings', next => { if (!next || typeof next !== 'object') throw new Error('Invalid settings'); const clean = {}; if ('ghidraDir' in next) clean.ghidraDir = typeof next.ghidraDir === 'string' ? next.ghidraDir : ''; return writeSettings(clean); });
+handle('diagnoseEngine', () => diagnoseEngine());
 handle('pickFolder', async () => { const r = await dialog.showOpenDialog(window, { title: 'Select your Ghidra install folder', properties: ['openDirectory'] }); return r.canceled ? null : r.filePaths[0]; });
 handle('licensing', async id => { const p = await store.get(id); return p.licensing ?? { unavailable: p.evidence ? 'This analysis was made before licensing review existed. Analyse the app again.' : 'Needs a completed analysis.' }; });
 handle('events', id => { store.path(id); return store.events(id); });
