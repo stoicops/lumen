@@ -299,3 +299,18 @@ test('dmg mount parsing and lifecycle: finds inner app.asar and always detaches'
   assert.equal(parseMountPoint('<plist></plist>'),null);
   if(process.platform!=='darwin')await assert.rejects(openDmg('/x.dmg'),/only on macOS/);
 });
+test('native Mac .app routes to its Mach-O executable instead of erroring',async()=>{
+  const {resolveTarget}=await import('../src/core/target.mjs');
+  const {mkdir,writeFile}=await import('node:fs/promises');
+  const root=await mkdtemp(join(tmpdir(),'lumen-macapp-'));
+  const app=join(root,'Native.app'),macos=join(app,'Contents','MacOS');
+  await mkdir(macos,{recursive:true});
+  await writeFile(join(app,'Contents','Info.plist'),'<plist><dict><key>CFBundleExecutable</key><string>NativeTool</string></dict></plist>');
+  await writeFile(join(macos,'NativeTool'),'\x7fELF binary');await writeFile(join(macos,'helper'),'x');
+  const r=await resolveTarget(app);
+  assert.equal(r.kind,'macho');assert.equal(r.target,join(macos,'NativeTool'));
+  assert.ok(r.notes[0].includes('native Mac app'));
+  // Electron .app still wins
+  const el=join(root,'El.app'),res=join(el,'Contents','Resources');await mkdir(res,{recursive:true});await writeFile(join(res,'app.asar'),'x');
+  assert.equal((await resolveTarget(el)).kind,'app-bundle');
+});

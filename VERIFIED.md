@@ -116,3 +116,8 @@ User reported "all works" after pulling the map, security and checked-answer cha
 ## .dmg auto-mount (macOS)
 
 - src/core/dmg.mjs: hdiutil attach -readonly -nobrowse; parse mount-point from -plist; recursively find a top-level .app/Contents/Resources/app.asar; always detach (-force) in finally. Wired into the job: dmg → mount → analyse inner app.asar as a normal Electron app → detach. Parser + non-macOS guard unit-tested (21 tests). Real mount is macOS-only, unverified here.
+
+## Native Mac .app routing + packaged-mode engine path
+
+- A non-Electron .app now routes to its Contents/MacOS executable (CFBundleExecutable from Info.plist, else first entry) for native inspection, instead of the old "not an Electron app" error. Reproduced the user error, fixed it; Electron run on a simulated native .app → status completed, family native, inner executable identified.
+- Adapter resolves the REA engine script from app.asar.unpacked in a packaged build (ELECTRON_NO_ASAR spawn cannot read inside app.asar).

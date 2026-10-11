@@ -1,7 +1,7 @@
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
+import { dirname, join, sep } from 'node:path';
 import { terminateTree, snapshotTree } from './process-cleanup.mjs';
 const require = createRequire(import.meta.url);
 // JavaScript/Electron deep-analysis contract (always required).
@@ -35,7 +35,10 @@ export class ReaAdapter {
     // Electron launches this with ELECTRON_RUN_AS_NODE; no shell, npx or downloads.
     // ELECTRON_NO_ASAR (set at spawn) stops Electron's fs from presenting .asar targets as
     // virtual folders, which made REA report ENOENT for real .asar files.
-    const script = join(dirname(require.resolve('rea-agents/package.json')), 'scripts/rea.mjs');
+    let script = join(dirname(require.resolve('rea-agents/package.json')), 'scripts/rea.mjs');
+    // In a packaged app the engine is unpacked beside the asar; run it from there, not from inside app.asar
+    // (we spawn with ELECTRON_NO_ASAR=1, so a path inside app.asar would not be readable as a real file).
+    script = script.replace(`app.asar${sep}`, `app.asar.unpacked${sep}`);
     return { command: process.execPath, args: [script, 'mcp'] };
   }
   async connect({ signal } = {}) {
