@@ -174,7 +174,7 @@ handle('decompile', async id => {
     native.engineConfigured = true;
     const full = await store.get(id); full.native = native; await store.save(full);
     return native;
-  } finally { try { await adapter.close(); } catch {} decompiling = null; }
+  } finally { try { await adapter.close(); } catch {} decompiling = null; if (!window.isDestroyed()) window.webContents.send('decompileProgress', { message: '' }); }
 });
 handle('cancelDecompile', () => { decompiling?.controller.abort(); return Boolean(decompiling); });
 handle('platform', () => process.platform);

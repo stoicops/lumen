@@ -19,6 +19,16 @@ const when = iso => new Date(iso).toLocaleString(undefined, { dateStyle: 'medium
 
 function StatusBadge({ status }) { const [text, tone] = STATUS[status] ?? [status, 'muted']; return <span className={`badge ${tone}`}>{text}</span>; }
 
+// Always-on activity strip in the toolbar. The app should never go silent: when something is running it
+// shows a spinner and the latest step; otherwise it says "Ready" so the user knows it is idle, not stuck.
+function ActivityStrip({ busy, message }) {
+  const active = busy || Boolean(message);
+  return <div className={`activity ${active ? 'busy' : 'idle'}`} role="status" aria-live="polite" title="What Lumen is doing right now">
+    {active ? <span className="activity-spin" aria-hidden /> : <span className="activity-dot" aria-hidden />}
+    <span className="activity-text">{active ? (message || 'Working…') : 'Ready'}</span>
+  </div>;
+}
+
 function AiStatus({ providers, selection, onRefresh }) {
   const [endpoint, model] = selection ? JSON.parse(selection) : [];
   const provider = providers.find(p => p.endpoint === endpoint);
@@ -180,13 +190,17 @@ function App() {
     const keys = list.flatMap(p => p.models.map(m => JSON.stringify([p.endpoint, m])));
     setSelection(current => keys.includes(current) ? current : keys[0] ?? '');
   };
+  const [decompileMsg, setDecompileMsg] = useState('');
   useEffect(() => {
     refresh().catch(e => setError({ message: e.message })); loadModels().catch(() => {});
     window.studio.platform().then(setPlatform).catch(() => {});
     const timer = setInterval(() => loadModels().catch(() => {}), 15000);
     const off = window.studio.onProgress(p => setStatus(p.message || 'Working…'));
-    return () => { clearInterval(timer); off(); };
+    const offDecompile = window.studio.onDecompileProgress(p => setDecompileMsg(p.message || ''));
+    return () => { clearInterval(timer); off(); offDecompile(); };
   }, []);
+  // The toolbar strip reflects whatever is live: analysis while busy, then decompilation progress.
+  const activityMsg = busy ? status : decompileMsg;
   const view = useMemo(() => project?.evidence ? describeEvidence(project.evidence) : null, [project]);
   async function analyze(path) {
     if (!path || busy) return; setBusy(true); setError(null); setStatus('Starting…');
@@ -202,6 +216,7 @@ function App() {
     <main>
       <header className="toolbar">
         <div className="toolbar-title">{project ? project.name : 'Lumen'}</div>
+        <ActivityStrip busy={busy} message={activityMsg} />
         <div className="toolbar-right"><AiStatus providers={providers} selection={selection} onRefresh={() => loadModels().catch(() => {})} /><button className="icon-btn" title="Settings" aria-label="Settings" onClick={() => setShowSettings(true)}>⚙</button></div>
       </header>
       <div className="content">

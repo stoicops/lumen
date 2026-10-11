@@ -58,8 +58,14 @@ nav { flex: 1; overflow-y: auto; }
 /* Main */
 main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg-2); }
 .toolbar { height: 52px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid var(--line); background: var(--bg); -webkit-app-region: drag; }
-.toolbar-title { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.toolbar-title { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; }
 .toolbar button { -webkit-app-region: no-drag; }
+/* Always-on activity strip: centred, shows a live step while working and "Ready" when idle. */
+.activity { -webkit-app-region: no-drag; display: inline-flex; align-items: center; gap: 8px; min-width: 0; margin: 0 14px; padding: 4px 12px; border-radius: 999px; font: 500 12px var(--font); color: var(--text-2); background: var(--card); border: 1px solid var(--line-2); max-width: 46%; }
+.activity.busy { color: var(--accent); background: var(--accent-soft); border-color: transparent; }
+.activity-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.activity-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 3px var(--green-soft); flex-shrink: 0; }
+.activity-spin { width: 13px; height: 13px; border: 2px solid var(--accent-soft); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; flex-shrink: 0; }
 .ai-status { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line-2); border-radius: 999px; padding: 4px 11px; background: var(--card); color: var(--text); font: 500 12px var(--font); cursor: default; }
 .dot { width: 8px; height: 8px; border-radius: 50%; } .dot.on { background: var(--green); box-shadow: 0 0 0 3px var(--green-soft); } .dot.warn { background: var(--orange); } .dot.off { background: var(--text-3); }
 .content { flex: 1; overflow-y: auto; padding: 22px 28px 40px; }
