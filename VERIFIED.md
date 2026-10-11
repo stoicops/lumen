@@ -165,3 +165,7 @@ User reported "all works" after pulling the map, security and checked-answer cha
 - 16 GB + 1 GB heap rules out simple RAM exhaustion; whole-screen blank the instant the Ghidra JVM starts is a macOS GPU/WindowServer event under sudden load, outside app control. REA already launches Ghidra headless (-Djava.awt.headless=true).
 - Change: native drop does identification only. Ghidra runs only via an explicit "Decompile with Ghidra" button (on-demand `decompile` IPC, own bounded session, memory guard, Stop). Nothing heavy launches automatically, so a drop can no longer freeze the machine.
 - Next diagnostic for the user: run analyzeHeadless directly in Terminal to isolate whether Ghidra alone (outside Lumen) blanks the screen.
+
+## Realistic available-memory estimate (macOS vm_stat)
+
+- The guard correctly caught the real cause: only ~1 GB free on a 16 GB Mac (Ollama model + Chrome + Electron), which is why launching Ghidra blanked the display. But os.freemem() understates usable RAM on macOS (reclaimable caches), so the guard would block even after freeing apps. availableMemGiB() now parses vm_stat (free+inactive+speculative+purgeable) for a realistic figure; fallback os.freemem() elsewhere. Used by the on-demand decompile guard.

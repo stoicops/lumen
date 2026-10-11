@@ -37,6 +37,20 @@ function readSettings() { try { return JSON.parse(readFileSync(settingsPath, 'ut
 function writeSettings(next) { const merged = { ...readSettings(), ...next }; writeFileSync(settingsPath, JSON.stringify(merged, null, 2), { mode: 0o600 }); return merged; }
 // A macOS GUI app inherits a minimal PATH and no JAVA_HOME, so Ghidra cannot find Java 21. Resolve a
 // JDK (settings override, else /usr/libexec/java_home -v 21) and augment PATH with common tool dirs.
+// macOS keeps most RAM in reclaimable caches, so os.freemem() drastically understates what is usable.
+// Estimate available memory from vm_stat (free + inactive + speculative + purgeable pages).
+function availableMemGiB() {
+  if (process.platform === 'darwin') {
+    try {
+      const out = execFileSync('/usr/bin/vm_stat', [], { encoding: 'utf8', timeout: 3000 });
+      const page = Number(out.match(/page size of (\d+) bytes/)?.[1] ?? 16384);
+      const pages = name => Number(out.match(new RegExp(`Pages ${name}:\\s+(\\d+)`))?.[1] ?? 0);
+      const usable = (pages('free') + pages('inactive') + pages('speculative') + pages('purgeable')) * page;
+      if (usable > 0) return usable / 1073741824;
+    } catch {}
+  }
+  return freemem() / 1073741824;
+}
 function resolveJavaHome(settings) {
   if (settings.javaHome) return settings.javaHome;
   if (process.platform === 'darwin') {
@@ -143,7 +157,7 @@ handle('decompile', async id => {
   const target = project.analysisTarget || project.target;
   if (!engineEnv().GHIDRA_INSTALL_DIR) throw new Error('Set a Ghidra folder in Settings first');
   const need = (parseInt(engineEnv().GHIDRA_HEADLESS_MAXMEM) || 1) + 1.5;
-  const free = freemem() / 1073741824;
+  const free = availableMemGiB();
   if (free < need) return { skipped: `Only about ${free.toFixed(1)} GB free; Ghidra needs ~${need.toFixed(1)} GB. Close other apps (and unload your local AI model), or lower the Ghidra memory limit in Settings.` };
   const adapter = new ReaAdapter({ extraEnv: engineEnv() }); const controller = new AbortController();
   decompiling = { adapter, controller };
