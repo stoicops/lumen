@@ -6,7 +6,7 @@ Read docs/REQUIREMENTS.md, docs/UPSTREAM-NOTES.md and README.md first. User: Sur
 
 1. Use Node 24.11+ (tested Node 24.19.0). Run npm ci, npm test, npm run build, npm run verify:rea.
 2. For Electron development, normal npm ci runs its install script. If installed using --ignore-scripts, run node node_modules/electron/install.js before npm start.
-3. Validate desktop startup on the user's Mac. This environment verified build/core plus the real REA handshake, discovery and binary_session call. Real analysis has since PASSED both in a later container and on the user's Mac (see VERIFIED.md). No graphical Electron window or real LM Studio/Ollama connection was tested. Do not bypass the ownership guard; rerun on the user’s Mac.
+3. Validate desktop startup on the user's Mac. This environment verified build/core plus the real REA handshake, discovery and binary_session call. Real analysis has since PASSED both in a later container and on the user's Mac (see VERIFIED.md). Desktop window, .asar analysis and real Ollama chat now PASS on the user's Mac (see VERIFIED.md). Do not bypass the ownership guard; rerun on the user’s Mac.
 4. Fix lifecycle/security issues before expanding targets; then build the evidence-driven map and beginner summary. Work through M1 acceptance criteria; never claim the starter is production-ready.
 
 ## Implemented

@@ -55,3 +55,8 @@ Reproduced in container with Electron 40.0.0 under Xvfb + remote debugging: orig
 User confirmed: window opens on macOS after the startup fix; Ollama model discovery listed gemma2:2b.
 Cause: REA runs under Electron's binary (ELECTRON_RUN_AS_NODE); Electron's fs presents .asar files as virtual folders, so REA saw ENOENT. Plain-Node verify only covered a folder target.
 Fix: spawn REA with ELECTRON_NO_ASAR=1. Added fixtures/simple-app.asar; `npm run verify:rea` now checks folder + asar, and `npm run verify:rea:electron` runs the asar case under Electron. Container: reproduced ENOENT under Electron, then PASS with cleanup verified after the fix. Awaiting Mac rerun.
+
+## End-to-end on the user's Mac (after commit fixing .asar)
+
+PASSED: npm start → window; user's own Lumen-Test-App.asar analysed to completion with evidence displayed; Ollama gemma2:2b answered a question from the summary (shown labelled "AI EXPLANATION · UNVERIFIED").
+Observed problems: (a) answer shows raw markdown (`**`) because output is rendered as plain escaped text (safe, but unreadable); (b) several model bullets ("uses workers", "uses endpoints", "uses storage") look like REA coverage/limitation family names restated as facts — ungrounded claims with no citations. Confirms item 4 (citation validation) matters. Cancel and Cmd+Q mid-analysis not yet reported.
