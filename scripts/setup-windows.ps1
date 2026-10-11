@@ -66,7 +66,7 @@ $settings = @{ ghidraDir = $ghRoot; ghidraMaxMem = '4G' }
 if ($jdk) { $settings.javaHome = $jdk.FullName }
 $settings | ConvertTo-Json | Set-Content -Path (Join-Path $cfgDir 'settings.json') -Encoding UTF8
 
-$installer = Get-ChildItem (Join-Path $dest 'release') -Filter 'Lumen Setup*.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+$installer = Get-ChildItem (Join-Path $dest 'release') -Filter 'Lumen-*.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
 Say "Done."
 if ($installer) {
   Write-Host "Installer: $($installer.FullName)" -ForegroundColor Green
