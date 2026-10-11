@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 const row = (k, v) => v != null && <div key={k} className="kv"><dt>{k}</dt><dd>{String(v)}</dd></div>;
 
@@ -16,6 +16,14 @@ export function NativeView({ project, platform, onOpenSettings }) {
     catch (e) { setError(e.message); } finally { setRunning(false); setProgress(''); }
   };
   const canDecompile = data && data.opened && !data.engineReady && project.native?.engineConfigured;
+  // Self-driving: once we know Ghidra is configured and the file is open but not yet decompiled, start it
+  // automatically — the user asked not to hunt for a button. The main process still runs the memory guard,
+  // so if RAM is tight it returns a skip note instead of launching and freezing the machine. Runs once per
+  // project; the Stop button stays available, and a manual "Decompile again" remains after a skip.
+  const autoStarted = useRef(null);
+  useEffect(() => {
+    if (canDecompile && !running && autoStarted.current !== project.id) { autoStarted.current = project.id; decompile(); }
+  }, [canDecompile, running, project.id]);
   if (error) return <section className="card"><p>{error}</p></section>;
   if (!data) return <section className="card"><p className="hint-text">Loading…</p></section>;
   if (data.unavailable) return <section className="card"><p>{data.unavailable}</p></section>;
@@ -32,15 +40,15 @@ export function NativeView({ project, platform, onOpenSettings }) {
     </section>
 
     {project.native && project.engineSkipped ? <section className="card engine-needed"><h3>Ghidra skipped to protect your computer</h3><p>{project.engineSkipped}</p><button className="btn" onClick={onOpenSettings}>Open Settings</button></section> : !data.engineReady ? <section className="card engine-needed">
-      <h3>Deep decompilation {canDecompile ? 'is ready to run' : 'needs an engine'}</h3>
-      {canDecompile ? <>
-        <p>Ghidra is configured. Decompiling turns machine code into readable functions, but it is <strong>heavy</strong>: it runs a separate Ghidra engine that can use a lot of CPU and memory for several minutes. Close other big apps first. Lumen runs it only when you click below, never automatically.</p>
+      <h3>Deep decompilation {running ? 'is running' : canDecompile ? 'is starting automatically' : 'needs an engine'}</h3>
+      {canDecompile || running ? <>
+        {running
+          ? <div className="running-row"><div className="spinner" /><div><strong>Ghidra is working on this file…</strong><div className="meta">{progress || 'importing and analysing — this can take a few minutes'}</div></div></div>
+          : <p>Ghidra is configured, so Lumen decompiles this file for you automatically — no button needed. It turns machine code into readable functions and runs a separate Ghidra engine that can use a lot of CPU and memory for a few minutes. Lumen checks you have enough free memory first so it won’t freeze your computer.</p>}
         <div className="ask-actions">
           {running ? <button className="btn" onClick={() => window.studio.cancelDecompile()}>Stop</button>
-            : <button className="btn primary" onClick={decompile}>Decompile with Ghidra</button>}
-          <span className="meta">{running ? '' : 'heavy: runs the Ghidra engine'}</span>
+            : <button className="btn primary" onClick={decompile}>Decompile again</button>}
         </div>
-        {running && <div className="running-row"><div className="spinner" /><div><strong>Ghidra is working…</strong><div className="meta">{progress || 'this can take a few minutes'}</div></div></div>}
         {runNote && <p className="inline-error">{runNote}</p>}
       </> : <>
         <p>Lumen can identify this binary and read its signature and layout, but turning machine code back into readable functions needs a decompiler engine. The free, open-source one is <strong>Ghidra</strong>.</p>
