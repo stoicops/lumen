@@ -132,3 +132,7 @@ User reported "all works" after pulling the map, security and checked-answer cha
 
 - Settings → Check engine runs `rea doctor --json` (fixed script path, engineEnv applied, bounded) and shows whether Ghidra is usable, with REA's own remediation and full diagnostics. Verified in-container: reports "GHIDRA_INSTALL_DIR is not set" + remediation (honest, no engine here).
 - This is what the user needs on their Mac: after pointing at Ghidra, Check engine will name the real blocker (missing Java 21, version mismatch, etc.).
+
+## Fix: engage Ghidra via provider_id
+
+- Root cause of "engine ready but not triggering": open_binary only loads a decompiler when provider_id is named; we omitted it, so binary_overview had no provider. Now inspectNative passes provider_id (ghidra) when GHIDRA_INSTALL_DIR is set, with a 20-min timeout for Ghidra import, a progress message, and a fallback to identification if the engine open fails (so the user still sees format + the engine error). Confirmed from rea-agents source (registerSessionTools: session.open providerId). Deep path still unverified here (no Ghidra); no-provider path re-verified (opened true, engineReady false).

@@ -60,9 +60,9 @@ export class ReaAdapter {
     try { return await bounded(handshake, { signal, timeoutMs: this.connectTimeoutMs, label: 'engine connection' }); }
     finally { clearInterval(spawnWatch); this.pid ??= this.transport?.pid ?? null; handshake.catch(() => {}); }
   }
-  async call(name, args, { signal, onprogress } = {}) {
+  async call(name, args, { signal, onprogress, timeout = 300000 } = {}) {
     if (!ALLOWED.has(name)) throw new Error('Tool is outside the static-analysis allow-list');
-    const result = await this.client.callTool({ name, arguments: args }, { signal, onprogress, timeout: 300000 });
+    const result = await this.client.callTool({ name, arguments: args }, { signal, onprogress, timeout });
     if (result.isError) throw new Error(result.content?.filter(c => c.type === 'text').map(c => c.text).join('\n') || 'REA failed');
     return result.structuredContent ?? { text: result.content?.filter(c => c.type === 'text').map(c => c.text).join('\n') };
   }
@@ -76,13 +76,18 @@ export class ReaAdapter {
     catch (error) { const text = String(error.message ?? error); const code = /provider_unavailable|capability_unavailable|unsupported/i.test(text) ? 'engine_required' : 'error'; return { ok: false, code, message: text.slice(0, 400) }; }
   }
 
-  // Identify and inspect a native / managed / android target. Deep decompilation (overview, pseudocode)
-  // needs an installed engine provider; without one we still return format, architecture, signature and layout.
-  async inspectNative(path, { signal } = {}) {
-    const opened = await this.tryCall('open_binary', { path }, { signal });
-    if (!opened.ok) return { opened: false, reason: opened.message };
+  // Identify and inspect a native / managed / android target. Pass providerId (e.g. 'ghidra') to engage
+  // a decompiler — open_binary only loads one when a provider is named. Ghidra's import is slow, hence the
+  // long timeout. Without a provider we still return format, architecture, signature and layout.
+  async inspectNative(path, { signal, providerId, onprogress } = {}) {
+    // Ghidra import/analysis can take minutes; allow up to 20 so it is not cut off.
+    let opened = providerId ? await this.tryCall('open_binary', { path, provider_id: providerId }, { signal, onprogress, timeout: 1200000 }) : { ok: false };
+    let engineOpenError = null;
+    if (providerId && !opened.ok) { engineOpenError = opened.message; opened = { ok: false }; } // fall back to identification
+    if (!opened.ok) opened = await this.tryCall('open_binary', { path }, { signal, timeout: 120000 });
+    if (!opened.ok) return { opened: false, reason: opened.message, providerId: providerId ?? null };
     const identity = opened.data?.result ?? opened.data;
-    const overview = await this.tryCall('binary_overview', {}, { signal });
+    const overview = engineOpenError ? { ok: false, message: engineOpenError } : await this.tryCall('binary_overview', {}, { signal, timeout: 1200000 });
     const engineReady = overview.ok;
     const sections = {};
     for (const [key, name, args] of [
