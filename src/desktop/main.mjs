@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain, dialog, session, clipboard } from 'electron';
-import { homedir } from 'node:os';
+import { homedir, freemem, totalmem } from 'node:os';
 import { dirname, join, resolve, sep, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { realpath, stat, writeFile, copyFile, readFile } from 'node:fs/promises';
@@ -74,7 +74,7 @@ function normalizeGhidraDir(dir) {
 function engineEnv() {
   const s = readSettings(); const env = {};
   if (typeof s.ghidraDir === 'string' && s.ghidraDir) env.GHIDRA_INSTALL_DIR = normalizeGhidraDir(s.ghidraDir);
-  const maxmem = (typeof s.ghidraMaxMem === 'string' && /^\d+[GM]$/.test(s.ghidraMaxMem)) ? s.ghidraMaxMem : '2G';
+  const maxmem = (typeof s.ghidraMaxMem === 'string' && /^\d+[GM]$/.test(s.ghidraMaxMem)) ? s.ghidraMaxMem : '1G';
   if (env.GHIDRA_INSTALL_DIR) env.GHIDRA_HEADLESS_MAXMEM = maxmem;
   const javaHome = resolveJavaHome(s);
   if (javaHome) {

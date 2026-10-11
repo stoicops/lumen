@@ -155,3 +155,7 @@ User reported "all works" after pulling the map, security and checked-answer cha
 
 - Availability requires <root>/support/analyzeHeadless to exist AND be executable (GhidraInstallation). Doctor folder check ("ghidra: folder OK") does not test this; providerInspections.ghidra.available / failing check does. diagnoseEngine now returns available + first failing check; native panel shows "Ghidra usable: yes/NO" with the failing code/detail/remediation.
 - Added prepareGhidra IPC + "Fix Ghidra permissions" button (macOS): xattr -dr com.apple.quarantine and chmod +x on support/ and ghidraRun, the usual causes of a downloaded Ghidra being unusable. Re-runs diagnostics after. Unverified on macOS.
+
+## Whole-Mac blank = system memory pressure — guard before launching Ghidra
+
+- User reported the WHOLE screen blanking (not just the window): system RAM exhaustion from Ghidra JVM + loaded Ollama model + Electron. Mitigations: default GHIDRA_HEADLESS_MAXMEM lowered 2G→1G; pre-flight check skips the engine (identification only) when free RAM < heap+1.5 GB, with an on-screen explanation (project.engineSkipped) instead of freezing the machine. Guidance: close apps / unload the local model before native decompile. Cannot fully prevent an OS-level freeze from the app; this keeps Lumen from being the trigger.

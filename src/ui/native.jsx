@@ -24,7 +24,7 @@ export function NativeView({ project, onOpenSettings }) {
       <p className="hint-text">Identified by REA without running the file. This is a native/compiled target, so Lumen reads its structure rather than its source.</p>
     </section>
 
-    {!data.engineReady ? <section className="card engine-needed">
+    {project.native && project.engineSkipped ? <section className="card engine-needed"><h3>Ghidra skipped to protect your Mac</h3><p>{project.engineSkipped}</p><button className="btn" onClick={onOpenSettings}>Open Settings</button></section> : !data.engineReady ? <section className="card engine-needed">
       <h3>Deep decompilation needs an engine</h3>
       <p>Lumen can identify this binary and read its signature and layout, but turning machine code back into readable functions needs a decompiler engine. The free, open-source one is <strong>Ghidra</strong>.</p>
       <ol className="plain">
