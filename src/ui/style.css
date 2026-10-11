@@ -210,3 +210,12 @@ svg.map:active { cursor: grabbing; }
 .claim-why { font-size: 11px; color: var(--orange); }
 .claim.bad .claim-why { color: var(--red); }
 .cite-text { font-size: 12px; background: var(--bg-2); border-radius: 6px; padding: 6px 8px; margin: 4px 0 0; color: var(--text); }
+
+/* Conversation */
+.conv-select { width: auto !important; max-width: 55%; margin: 0 !important; padding: 3px 6px !important; font-size: 12px !important; }
+.thread { max-height: 60vh; overflow-y: auto; margin: 4px 0 8px; }
+.thread:empty { display: none; }
+.bubble-user { margin: 12px 0 4px auto; max-width: 85%; width: fit-content; background: var(--accent); color: #fff; padding: 7px 11px; border-radius: 14px 14px 4px 14px; white-space: pre-wrap; }
+.answer.streaming { border-top: 0; }
+.ask-actions { display: flex; gap: 12px; align-items: center; }
+.ask-actions .meta { margin-left: auto; }

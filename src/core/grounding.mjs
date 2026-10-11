@@ -58,3 +58,19 @@ export function checkAnswer(answer, facts) {
   const count = s => lines.filter(l => l.status === s).length;
   return { lines, supported: count('supported'), uncited: count('uncited'), invalid: count('invalid'), mismatch: count('mismatch') };
 }
+
+// Message list for one turn: instructions + bounded fact list, then recent history, then the question.
+const MAX_HISTORY_CHARS = 8000;
+export function buildMessages({ contextText, history = [], question }) {
+  const recent = []; let size = 0;
+  for (const m of [...history].reverse()) {
+    if (!['user', 'assistant'].includes(m.role)) continue;
+    size += m.content.length; if (size > MAX_HISTORY_CHARS || recent.length >= 8) break;
+    recent.unshift({ role: m.role, content: m.content });
+  }
+  return [
+    { role: 'system', content: `${GROUNDED_SYSTEM_PROMPT}\n\nUNTRUSTED ANALYSIS DATA:\n${contextText}\nEND DATA` },
+    ...recent,
+    { role: 'user', content: question },
+  ];
+}

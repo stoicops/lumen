@@ -11,7 +11,8 @@ const STATUS = {
 
 export function CheckedAnswer({ answer }) {
   const [open, setOpen] = useState(null), [plain, setPlain] = useState(false);
-  const facts = Object.fromEntries(answer.facts.map(f => [f.id, f.text]));
+  if (!answer.check) return <div className="answer"><Markdown text={answer.answer} /></div>;
+  const facts = Object.fromEntries((answer.facts ?? []).map(f => [f.id, f.text]));
   const c = answer.check, claims = c.supported + c.uncited + c.invalid + c.mismatch;
   return <div className="answer">
     <div className="answer-head"><span className="tag ai">AI answer · checked by Lumen</span><span className="meta">{answer.model}</span></div>

@@ -9,7 +9,7 @@ import './style.css';
 
 const STATUS = {
   completed: ['Complete', 'ok'], running: ['Analysing…', 'busy'], queued: ['Queued', 'busy'], cancelling: ['Stopping…', 'warn'],
-  cancelled: ['Cancelled', 'muted'], failed: ['Failed', 'bad'], interrupted: ['Interrupted', 'warn'],
+  cancelled: ['Cancelled', 'muted'], failed: ['Failed', 'bad'], interrupted: ['Interrupted', 'warn'], unreadable: ['Unreadable', 'bad'],
 };
 const LABEL = { observed: 'Seen in code', 'not-observed': 'Not seen' };
 const when = iso => new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
@@ -117,24 +117,53 @@ function EvidenceSheet({ fact, view, onClose }) {
 }
 
 function AskPanel({ project, providers, selection, setSelection }) {
-  const [question, setQuestion] = useState(''), [answer, setAnswer] = useState(null), [asking, setAsking] = useState(false), [error, setError] = useState('');
-  useEffect(() => { setAnswer(null); setError(''); }, [project.id]);
+  const [question, setQuestion] = useState(''), [error, setError] = useState('');
+  const [conversations, setConversations] = useState([]), [conversationId, setConversationId] = useState(null), [messages, setMessages] = useState([]);
+  const [streaming, setStreaming] = useState(null); // { requestId, text }
   const options = providers.flatMap(p => p.models.map(m => ({ key: JSON.stringify([p.endpoint, m]), label: `${p.name} · ${m}` })));
+  const loadList = () => window.studio.conversations(project.id).then(setConversations).catch(() => {});
+  useEffect(() => { setConversationId(null); setMessages([]); setError(''); loadList(); }, [project.id]);
+  useEffect(() => { if (conversationId) window.studio.conversation(conversationId).then(setMessages).catch(e => setError(e.message)); else setMessages([]); }, [conversationId]);
+  useEffect(() => window.studio.onChat(e => setStreaming(s => s && s.requestId === e.requestId && e.delta ? { ...s, text: s.text + e.delta } : s)), []);
   async function ask() {
-    setAsking(true); setError('');
-    try { const [endpoint, model] = JSON.parse(selection); const r = await window.studio.ask({ projectId: project.id, endpoint, model, question }); setAnswer(r); }
-    catch (e) { setError(e.message); } finally { setAsking(false); }
+    const q = question.trim(); if (!q || !selection) return;
+    const requestId = crypto.randomUUID(); setError(''); setQuestion('');
+    setMessages(m => [...m, { role: 'user', content: q }]); setStreaming({ requestId, text: '' });
+    try {
+      const [endpoint, model] = JSON.parse(selection);
+      const r = await window.studio.ask({ requestId, projectId: project.id, conversationId, endpoint, model, question: q });
+      setConversationId(r.conversationId); setMessages(await window.studio.conversation(r.conversationId)); loadList();
+    } catch (e) { setError(e.message); } finally { setStreaming(null); }
+  }
+  async function removeConversation() {
+    if (!conversationId) return; await window.studio.deleteConversation(conversationId); setConversationId(null); loadList();
   }
   return <section className="card ask">
-    <h3>Ask your local AI</h3>
+    <div className="card-head"><h3>Ask your local AI</h3>
+      {conversations.length > 0 && <select aria-label="Conversation" className="conv-select" value={conversationId ?? ''} onChange={e => setConversationId(e.target.value || null)} disabled={Boolean(streaming)}>
+        <option value="">New conversation</option>
+        {conversations.map(c => <option key={c.id} value={c.id}>{c.title.slice(0, 40)} ({c.messages})</option>)}
+      </select>}
+    </div>
     {options.length === 0 ? <p className="hint-text">Open LM Studio or Ollama, start its local server and load a model. The dot at the top turns green when Lumen can see it.</p>
-      : <select aria-label="Model" value={selection} onChange={e => setSelection(e.target.value)}>{options.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}</select>}
+      : <select aria-label="Model" value={selection} onChange={e => setSelection(e.target.value)} disabled={Boolean(streaming)}>{options.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}</select>}
+    <div className="thread" aria-live="polite">
+      {messages.map((m, i) => m.role === 'user' ? <p key={i} className="bubble-user">{m.content}</p>
+        : m.role === 'assistant' ? <div key={i}>{m.meta?.stopped && <p className="hint-text">Stopped early. Only part of the answer was received.</p>}<CheckedAnswer answer={{ answer: m.content, ...m.meta }} /></div>
+        : <p key={i} className="inline-error">{m.content}</p>)}
+      {streaming && <div className="answer streaming"><div className="answer-head"><span className="tag ai">AI is writing…</span><span className="meta">checked when finished</span></div>
+        <Markdown text={streaming.text.replace(/\[((?:[FLS]\d+)(?:\s*,\s*[FLS]\d+)*)\]/g, '') || '…'} /></div>}
+    </div>
     <textarea aria-label="Your question" value={question} onChange={e => setQuestion(e.target.value)} maxLength={8000}
-      placeholder="e.g. How do the parts of this app talk to each other?"
-      onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && selection && question.trim()) ask(); }} />
-    <button className="btn primary" disabled={asking || !selection || !question.trim() || !project.evidence} onClick={ask}>{asking ? 'Thinking…' : 'Ask'}</button>
+      placeholder={messages.length ? 'Ask a follow-up…' : 'e.g. How do the parts of this app talk to each other?'}
+      onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !streaming) ask(); }} />
+    <div className="ask-actions">
+      {streaming ? <button className="btn" onClick={() => window.studio.stopAsk(streaming.requestId)}>Stop</button>
+        : <button className="btn primary" disabled={!selection || !question.trim() || !project.evidence} onClick={ask}>{messages.length ? 'Send' : 'Ask'}</button>}
+      {conversationId && !streaming && <button className="link" onClick={removeConversation}>Delete conversation</button>}
+      <span className="meta">⌘↩ to send</span>
+    </div>
     {error && <p className="inline-error" role="alert">{error}</p>}
-    {answer && <CheckedAnswer answer={answer} />}
   </section>;
 }
 
@@ -166,7 +195,7 @@ function App() {
     try { if (await window.studio.remove(p.id)) { if (project?.id === p.id) setProject(null); await refresh(); } } catch (e) { setError({ message: e.message }); }
   }
   return <div className={`shell ${platform === 'darwin' ? 'mac' : ''}`}>
-    <Sidebar projects={projects} current={project} busy={busy} onSelect={p => { setProject(p); setError(p.error ? friendlyError(p.error) : null); }} onNew={choose} onDelete={remove} />
+    <Sidebar projects={projects} current={project} busy={busy} onSelect={p => { if (p.status === 'unreadable') { setProject(null); setError({ message: p.error }); return; } window.studio.project(p.id).then(full => { setProject(full); setError(full.error ? friendlyError(full.error) : null); }).catch(e => setError({ message: e.message })); }} onNew={choose} onDelete={remove} />
     <main>
       <header className="toolbar">
         <div className="toolbar-title">{project ? project.name : 'Lumen'}</div>

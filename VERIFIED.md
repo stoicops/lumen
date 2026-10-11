@@ -93,3 +93,9 @@ Observed problems: (a) answer shows raw markdown (`**`) because output is render
 ## User confirmation on macOS (11 October 2026)
 
 User reported "all works" after pulling the map, security and checked-answer changes: Map, Security tab and grounded AI answers working on the Mac with a local Ollama model. Cancel/Cmd+Q mid-analysis not separately reported.
+
+## SQLite store, saved conversations, streaming chat
+
+- Store moved to node:sqlite (WAL, migrations, transactions); evidence bundles stay as files. Legacy project.json folders imported once; unreadable ones listed as "unreadable". Job events persisted.
+- Chat streams over SSE with a byte limit enforced while reading; Stop keeps the partial answer marked "stopped early"; conversations saved per project with follow-ups (bounded history).
+- npm test: 17 passed. Electron + fake streaming server: mid-stream text shown, follow-up received earlier messages, Stop recorded, conversation restored after reload.

@@ -4,7 +4,7 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import http from 'node:http';
-import { localEndpoint, askEvidence } from '../src/core/local-model.mjs';
+import { localEndpoint, streamChat } from '../src/core/local-model.mjs';
 import { ProjectStore } from '../src/core/projects.mjs';
 import { ReaAdapter, CancelledError } from '../src/core/rea-adapter.mjs';
 import { alive, descendants, terminateTree } from '../src/core/process-cleanup.mjs';
@@ -19,13 +19,34 @@ test('project interrupted state survives restart and traversal is blocked',async
   await new ProjectStore(root).recover();assert.equal((await store.get(p.id)).status,'interrupted');
   assert.throws(()=>store.path('../../escape'));
 });
-test('evidence chat supplies no tools and rejects redirects',async()=>{
+test('streaming chat: SSE deltas, no tools, byte limit while streaming, JSON fallback, redirects and stop',async()=>{
+  const serve=handler=>new Promise(r=>{const srv=http.createServer(handler);srv.listen(0,'127.0.0.1',()=>r(srv));});
+  const url=srv=>`http://127.0.0.1:${srv.address().port}/v1`;
   let captured;
-  const server=http.createServer(async(req,res)=>{let text='';for await(const c of req)text+=c;captured=JSON.parse(text);res.setHeader('content-type','application/json');res.end(JSON.stringify({choices:[{message:{content:'Unknown from supplied evidence.'}}]}));});
-  await new Promise(r=>server.listen(0,'127.0.0.1',r));
-  try{const result=await askEvidence({endpoint:`http://127.0.0.1:${server.address().port}/v1`,model:'fixture',question:'What is known?',evidence:{evidence_id:'fixture'}});assert.match(result.answer,/Unknown/);assert.equal(captured.tools,undefined);assert.match(captured.messages[1].content,/fixture/);}finally{await new Promise(r=>server.close(r));}
-  const redirect=http.createServer((_req,res)=>{res.writeHead(302,{location:'https://example.com'});res.end();});await new Promise(r=>redirect.listen(0,'127.0.0.1',r));
-  try{await assert.rejects(askEvidence({endpoint:`http://127.0.0.1:${redirect.address().port}/v1`,model:'fixture',question:'Q',evidence:{}}));}finally{await new Promise(r=>redirect.close(r));}
+  const sse=await serve(async(req,res)=>{let t='';for await(const c of req)t+=c;captured=JSON.parse(t);res.writeHead(200,{'content-type':'text/event-stream'});
+    for(const w of ['One ','window ','[F1].'])res.write(`data: ${JSON.stringify({choices:[{delta:{content:w,reasoning_content:'hidden'}}]})}\n\n`);res.end('data: [DONE]\n\n');});
+  const deltas=[];const text=await streamChat({endpoint:url(sse),model:'m',messages:[{role:'user',content:'q'}],onDelta:d=>deltas.push(d)});
+  assert.equal(text,'One window [F1].');assert.deepEqual(deltas,['One ','window ','[F1].']);assert.equal(captured.tools,undefined);assert.equal(captured.stream,true);
+  sse.close();
+  const huge=await serve((_q,res)=>{res.writeHead(200,{'content-type':'text/event-stream'});const line=`data: ${JSON.stringify({choices:[{delta:{content:'x'.repeat(60000)}}]})}\n\n`;let n=0;const tick=()=>{if(n++<50&&!res.destroyed){res.write(line);setImmediate(tick);}else res.end();};tick();});
+  await assert.rejects(streamChat({endpoint:url(huge),model:'m',messages:[]}),/size limit/);huge.closeAllConnections();huge.close();
+  const json=await serve((_q,res)=>{res.setHeader('content-type','application/json');res.end(JSON.stringify({choices:[{message:{content:'Plain [F2].'}}]}));});
+  assert.equal(await streamChat({endpoint:url(json),model:'m',messages:[]}),'Plain [F2].');json.close();
+  const redirect=await serve((_q,res)=>{res.writeHead(302,{location:'https://example.com'});res.end();});
+  await assert.rejects(streamChat({endpoint:url(redirect),model:'m',messages:[]}));redirect.close();
+  const slow=await serve((_q,res)=>{res.writeHead(200,{'content-type':'text/event-stream'});res.write(`data: ${JSON.stringify({choices:[{delta:{content:'partial'}}]})}\n\n`);});
+  const controller=new AbortController();const got=[];
+  const p=streamChat({endpoint:url(slow),model:'m',messages:[],signal:controller.signal,onDelta:d=>{got.push(d);controller.abort();}});
+  await assert.rejects(p);assert.deepEqual(got,['partial']);slow.closeAllConnections();slow.close();
+  await assert.rejects(streamChat({endpoint:'https://api.example.com/v1',model:'m',messages:[]}),/loopback/);
+});
+test('multi-turn messages keep instructions and facts first and bound the history',async()=>{
+  const {buildMessages,GROUNDED_SYSTEM_PROMPT}=await import('../src/core/grounding.mjs');
+  const history=Array.from({length:20},(_,i)=>({role:i%2?'assistant':'user',content:`m${i} `+'x'.repeat(900)}));
+  const m=buildMessages({contextText:'[F1] fact',history:[...history,{role:'error',content:'boom'}],question:'Q?'});
+  assert.equal(m[0].role,'system');assert.ok(m[0].content.startsWith(GROUNDED_SYSTEM_PROMPT));assert.match(m[0].content,/\[F1\] fact/);
+  assert.deepEqual(m.at(-1),{role:'user',content:'Q?'});
+  assert.ok(m.length-2<=8);assert.ok(!m.some(x=>x.role==='error'));assert.match(m.at(-2).content,/^m19/);
 });
 test('cancel during connect stops the engine without waiting for the handshake and verifies process-tree cleanup',async()=>{
   const fixture=new URL('./fixtures/stubborn-engine.mjs',import.meta.url).pathname;
@@ -176,4 +197,26 @@ test('grounded chat: numbered facts, scope notes kept apart, and each answer lin
 test('desktop entry files parse (main process and preload)',async()=>{
   const {execFileSync}=await import('node:child_process');
   for(const f of ['src/desktop/main.mjs','src/desktop/preload.cjs'])execFileSync(process.execPath,['--check',f]);
+});
+test('SQLite store: migrations, legacy JSON import, damaged records shown, events and conversations',async()=>{
+  const {writeFile,mkdir,readdir}=await import('node:fs/promises');const {randomUUID}=await import('node:crypto');
+  const root=await mkdtemp(join(tmpdir(),'lumen-db-'));
+  const good=randomUUID(),bad=randomUUID();
+  await mkdir(join(root,good));await writeFile(join(root,good,'project.json'),JSON.stringify({id:good,name:'old.asar',target:'/x/old.asar',createdAt:'2026-10-01T00:00:00Z',status:'completed',evidence:{evidence_id:'ev_1'}}));
+  await mkdir(join(root,bad));await writeFile(join(root,bad,'project.json'),'{not json');
+  const store=new ProjectStore(root);
+  const list=await store.list();
+  assert.equal(list.find(p=>p.id===good).status,'completed');assert.equal(list.find(p=>p.id===good).hasEvidence,true);assert.equal(list.find(p=>p.id===good).evidence,undefined,'list stays light');
+  assert.equal((await store.get(good)).evidence.evidence_id,'ev_1');
+  const broken=list.find(p=>p.id===bad);assert.equal(broken.status,'unreadable');assert.match(broken.error,/could not be read/);
+  assert.ok((await readdir(join(root,good))).includes('project.json.imported'));
+  store.event(good,'progress','step 1');assert.deepEqual(store.events(good).map(e=>e.message),['step 1']);
+  const c=store.createConversation(good,'What is this?');store.addMessage(c,'user','What is this?');store.addMessage(c,'assistant','An app [F1].',{check:{supported:1}});
+  assert.deepEqual(store.messages(c).map(m=>m.role),['user','assistant']);assert.equal(store.messages(c)[1].meta.check.supported,1);
+  assert.equal(store.conversations(good)[0].messages,2);assert.equal(store.conversationProject(c),good);
+  store.close();
+  const again=new ProjectStore(root);assert.equal((await again.get(good)).name,'old.asar','reopens without re-import');
+  await again.delete(good);assert.equal(again.conversationProject(c),null,'conversations deleted with project');
+  assert.equal(again.db.prepare('SELECT version FROM schema_version').get().version,1);
+  again.close();
 });

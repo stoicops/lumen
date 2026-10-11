@@ -9,9 +9,9 @@ import { projectArchitecture } from '../core/graph.mjs';
 import { reviewSecurity } from '../core/security.mjs';
 import { scanTarget } from '../core/secret-scan.mjs';
 import { ProjectStore, report } from '../core/projects.mjs';
-import { discoverModels, askGrounded } from '../core/local-model.mjs';
+import { discoverModels, streamChat } from '../core/local-model.mjs';
 import { describeEvidence } from '../core/findings.mjs';
-import { buildContext, checkAnswer, GROUNDED_SYSTEM_PROMPT } from '../core/grounding.mjs';
+import { buildContext, checkAnswer, buildMessages } from '../core/grounding.mjs';
 const here = dirname(fileURLToPath(import.meta.url));
 // Electron's fs treats .asar files as folders; the key scan must read the raw archive bytes.
 async function scanWithoutAsarShim(target, signal) {
@@ -45,6 +45,8 @@ window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 window.webContents.on('will-navigate', event => event.preventDefault());
 handle('choose', async () => { const result = await dialog.showOpenDialog(window, { title: 'Select JavaScript app folder or ASAR', properties: ['openFile', 'openDirectory'] }); return result.canceled ? null : result.filePaths[0]; });
 handle('projects', () => store.list());
+handle('project', id => store.get(id));
+handle('events', id => { store.path(id); return store.events(id); });
 handle('copyMarkdown', async id => { const project = await store.get(id); clipboard.writeText(report(project, { home: homedir(), security: project.evidence ? await securityFor(id) : null })); return true; });
 handle('map', async id => {
   const { bundle, unavailable } = await readBundle(id); if (unavailable) return { unavailable };
@@ -69,7 +71,7 @@ handle('models', () => discoverModels());
 handle('cancel', async () => {
   if (!active) return false;
   // Persist the request before aborting; `cancelled` is only written after cleanup is confirmed.
-  active.project.status = 'cancelling'; active.project.cancelRequestedAt = new Date().toISOString();
+  active.project.status = 'cancelling'; active.project.cancelRequestedAt = new Date().toISOString(); store.event(active.project.id, 'cancel-requested');
   await store.save(active.project); active.controller.abort(); return true;
 });
 handle('analyze', async path => {
@@ -80,7 +82,7 @@ handle('analyze', async path => {
   const project = await store.create(target); const adapter = new ReaAdapter(); const controller = new AbortController();
   let finished; active = { controller, adapter, project, done: new Promise(r => { finished = r; }) };
   project.status = 'running'; project.startedAt = new Date().toISOString(); await store.save(project);
-  const progress = value => { const update = { projectId: project.id, ...value }; if (!window.isDestroyed()) window.webContents.send('progress', update); };
+  const progress = value => { if (value.message) store.event(project.id, 'progress', value.message); const update = { projectId: project.id, ...value }; if (!window.isDestroyed()) window.webContents.send('progress', update); };
   let outcome;
   try {
     progress({ message: 'Connecting to local REA engine' });
@@ -105,19 +107,42 @@ handle('analyze', async path => {
     project.status = outcome === 'cancelled' && !project.cleanup.verified ? 'cancelling' : outcome;
     if (outcome === 'cancelled') { project.evidence = undefined; project.secrets = undefined; } // never expose a partial result after cancel
     project.finishedAt = new Date().toISOString();
-    active = null; await store.save(project); finished();
+    active = null; await store.save(project); store.event(project.id, project.status, project.error ?? (project.cleanup?.verified ? 'Engine stopped (verified)' : project.cleanup?.reason)); finished();
   }
   progress({ message: project.status }); return project;
 });
+const chats = new Map(); // requestId -> AbortController
 handle('ask', async input => {
-  if (!input || typeof input !== 'object') throw new Error('Invalid chat request');
+  if (!input || typeof input !== 'object' || typeof input.question !== 'string' || !input.question.trim() || input.question.length > 8000) throw new Error('Enter a question under 8,000 characters');
+  if (typeof input.requestId !== 'string' || !/^[0-9a-f-]{36}$/.test(input.requestId)) throw new Error('Invalid request');
   const project = await store.get(input.projectId);
   if (!project.evidence) throw new Error('Analyse an app first');
+  let conversationId = input.conversationId;
+  if (conversationId && store.conversationProject(conversationId) !== project.id) throw new Error('Conversation does not belong to this project');
+  const history = conversationId ? store.messages(conversationId) : [];
+  conversationId ??= store.createConversation(project.id, input.question);
   const { bundle } = await readBundle(project.id);
   const context = buildContext({ view: describeEvidence(project.evidence), map: bundle ? projectArchitecture(bundle) : null, security: await securityFor(project.id) });
-  const result = await askGrounded({ endpoint: input.endpoint, model: input.model, question: input.question, context: context.text, systemPrompt: GROUNDED_SYSTEM_PROMPT });
-  return { ...result, check: checkAnswer(result.answer, context.facts), facts: context.facts.map(({ id, text }) => ({ id, text })), omitted: context.omitted };
+  store.addMessage(conversationId, 'user', input.question);
+  const controller = new AbortController(); chats.set(input.requestId, controller);
+  const TIMEOUT = new Error('The model took longer than 5 minutes');
+  const timeout = setTimeout(() => controller.abort(TIMEOUT), 300000);
+  const send = payload => { if (!window.isDestroyed()) window.webContents.send('chat', { requestId: input.requestId, conversationId, ...payload }); };
+  let text = '', partial = '', stopped = false, failure = null;
+  try { text = await streamChat({ endpoint: input.endpoint, model: input.model, messages: buildMessages({ contextText: context.text, history, question: input.question }), signal: controller.signal, onDelta: delta => { partial += delta; send({ delta }); } }); }
+  catch (error) { text = partial; if (controller.signal.aborted && controller.signal.reason !== TIMEOUT) stopped = true; else failure = String(controller.signal.aborted ? TIMEOUT.message : error.message ?? error); }
+  finally { clearTimeout(timeout); chats.delete(input.requestId); }
+  if (failure && !text) { store.addMessage(conversationId, 'error', failure); throw new Error(failure); }
+  const facts = context.facts.map(({ id, text }) => ({ id, text }));
+  const meta = { model: input.model, check: checkAnswer(text, context.facts), facts, omitted: context.omitted, stopped, failure };
+  store.addMessage(conversationId, 'assistant', text, meta);
+  return { conversationId, answer: text, ...meta };
 });
+handle('stopAsk', requestId => { chats.get(requestId)?.abort(); return chats.has(requestId); });
+handle('conversations', id => { store.path(id); return store.conversations(id); });
+handle('conversation', id => { if (typeof id !== 'string' || !store.conversationProject(id)) throw new Error('Conversation not found'); return store.messages(id); });
+handle('deleteConversation', id => { if (typeof id !== 'string') throw new Error('Invalid conversation'); store.deleteConversation(id); return true; });
+
 handle('export', async id => {
   const project = await store.get(id);
   const result = await dialog.showSaveDialog(window, { defaultPath: `${project.name.replace(/[^a-z0-9_-]/gi, '_')}-lumen.md`, filters: [{ name: 'Markdown report', extensions: ['md'] }] });
