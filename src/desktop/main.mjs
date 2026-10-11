@@ -19,6 +19,9 @@ import { ProjectStore, report } from '../core/projects.mjs';
 import { discoverModels, streamChat } from '../core/local-model.mjs';
 import { describeEvidence } from '../core/findings.mjs';
 import { buildContext, checkAnswer, buildMessages } from '../core/grounding.mjs';
+// Pin a stable app name so userData is always %APPDATA%\Lumen (or ~/Library/Application Support/Lumen),
+// not the package name. Must run before any app.getPath('userData'). Keeps settings in one predictable place.
+app.setName('Lumen');
 const here = dirname(fileURLToPath(import.meta.url));
 // Electron's fs treats .asar files as folders; the key scan must read the raw archive bytes.
 async function scanWithoutAsarShim(fn, target, signal) {
