@@ -16,10 +16,12 @@ const ALLOWED = new Set([...JS_TOOLS, ...NATIVE_READ]);
 export const CONNECT_TIMEOUT_MS = 60000;
 // Guard against an engine section so large it would blank the renderer when sent over IPC.
 const MAX_SECTION_BYTES = 512 * 1024;
-function cap(data) {
-  try { const json = JSON.stringify(data); if (json.length <= MAX_SECTION_BYTES) return data; return { truncated: true, bytes: json.length, preview: json.slice(0, 4000) }; }
+function cap(data, max = MAX_SECTION_BYTES) {
+  try { const json = JSON.stringify(data); if (json.length <= max) return data; return { truncated: true, bytes: json.length, preview: json.slice(0, 4000) }; }
   catch { return { truncated: true, note: 'section could not be serialized' }; }
 }
+// Managed (.NET) member listings are richer than other sections and safe to keep larger; still bounded.
+const MAX_MANAGED_BYTES = 3 * 1024 * 1024;
 export class CancelledError extends Error { constructor(message = 'Cancelled') { super(message); this.name = 'CancelledError'; } }
 
 // Rejects as soon as the signal aborts or the timeout passes, without waiting for `work`.
@@ -88,16 +90,40 @@ export class ReaAdapter {
   // a decompiler — open_binary only loads one when a provider is named. Ghidra's import is slow, hence the
   // long timeout. Without a provider we still return format, architecture, signature and layout.
   async inspectNative(path, { signal, providerId, onprogress } = {}) {
-    // Ghidra import/analysis can take minutes; allow up to 20 so it is not cut off.
+    // Try the decompiler engine (e.g. Ghidra) only for native machine code. .NET/managed assemblies are
+    // handled by the managed route below and never go to Ghidra (it reports unsupported_provider for them).
     let opened = providerId ? await this.tryCall('open_binary', { path, provider_id: providerId }, { signal, onprogress, timeout: 1200000 }) : { ok: false };
     let engineOpenError = null;
     if (providerId && !opened.ok) { engineOpenError = opened.message; opened = { ok: false }; } // fall back to identification
     if (!opened.ok) opened = await this.tryCall('open_binary', { path }, { signal, timeout: 120000 });
     if (!opened.ok) return { opened: false, reason: opened.message, providerId: providerId ?? null };
     const identity = opened.data?.result ?? opened.data;
-    const overview = engineOpenError ? { ok: false, message: engineOpenError } : await this.tryCall('binary_overview', {}, { signal, timeout: 1200000 });
-    const engineReady = overview.ok;
+    const unwrap = r => r.data?.result ?? r.data;
     const sections = {};
+
+    // Managed (.NET) detection + deep read. This is execution-free and cheap, so Lumen always does it —
+    // a .NET assembly is fully analysed here (types, members, signatures) with NO decompiler engine. We
+    // treat a non-null CLI header as the signal that the target really is managed.
+    if (onprogress) onprogress({ message: 'Checking whether this is a .NET assembly…' });
+    const managedArtifact = await this.tryCall('inspect_managed_artifact', { path }, { signal });
+    const mData = managedArtifact.ok ? unwrap(managedArtifact) : null;
+    const isManaged = Boolean(mData && mData.pe && mData.pe.cli);
+    if (isManaged) {
+      sections.managed = cap(mData);
+      if (onprogress) onprogress({ message: 'Reading .NET types, methods and signatures…' });
+      const members = await this.tryCall('inspect_managed_members', { path }, { signal, onprogress });
+      if (members.ok) sections.members = cap(unwrap(members), MAX_MANAGED_BYTES);
+      const boundaries = await this.tryCall('inspect_managed_native_boundaries', { path }, { signal });
+      if (boundaries.ok) sections.nativeBoundaries = cap(unwrap(boundaries));
+      for (const [key, name, args] of [['signature', 'inspect_signature', {}], ['layout', 'inspect_binary_layout', { path }]]) {
+        const r = await this.tryCall(name, args, { signal }); if (r.ok) sections[key] = cap(r.data);
+      }
+      return { opened: true, identity, managed: true, engineReady: true, providerUsed: '.NET managed metadata', engineMessage: null, engineLog: null, sections };
+    }
+
+    // Native machine code: a decompiler engine (Ghidra) is required for the deep overview.
+    const overview = engineOpenError ? { ok: false, message: engineOpenError } : (providerId ? await this.tryCall('binary_overview', {}, { signal, timeout: 1200000 }) : { ok: false, message: null });
+    const engineReady = overview.ok;
     for (const [key, name, args] of [
       ['signature', 'inspect_signature', {}],
       ['layout', 'inspect_binary_layout', { path }],
@@ -105,7 +131,6 @@ export class ReaAdapter {
       ['pe_resources', 'inspect_pe_resources', { path }],
       ['plist', 'inspect_plist', { path }],
       ['android', 'inspect_android_package', { path }],
-      ['managed', 'inspect_managed_artifact', { path }],
     ]) { const r = await this.tryCall(name, args, { signal }); if (r.ok) sections[key] = cap(r.data); }
     // Deep sections only when an engine is present. Keep ONLY the bounded overview — pulling full
     // list_strings / list_procedures can be tens of MB, which over IPC can blank the renderer. Detailed

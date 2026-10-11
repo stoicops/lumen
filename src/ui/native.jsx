@@ -80,7 +80,8 @@ export function NativeView({ project, platform, onOpenSettings }) {
         {diag && <details><summary>Full diagnostics</summary><pre className="raw">{diag.raw}</pre></details>}
       </div>}
     </section> : <section className="card">
-      <div className="card-head"><h3>Decompilation result</h3><span className="meta">{data.providerUsed ?? 'engine'} · read without running</span></div>
+      <div className="card-head"><h3>{data.managed ? 'What’s inside this .NET app' : 'Decompilation result'}</h3><span className="meta">{data.providerUsed ?? 'engine'} · read without running</span></div>
+      {data.managed && <p className="hint-text">This is a <strong>.NET assembly</strong>. Lumen read its types, methods and signatures straight from the app’s own metadata — no decompiler engine (like Ghidra) is needed for .NET, and none was run.</p>}
       <StatTiles data={data.sections} />
       {sectionKeys.map(k => <StructuredSection key={k} title={k} value={data.sections[k]} />)}
       <p className="hint-text">This is what the engine recovered from the compiled binary; it does not prove runtime behaviour.</p>
