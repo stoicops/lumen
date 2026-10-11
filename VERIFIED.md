@@ -150,3 +150,8 @@ User reported "all works" after pulling the map, security and checked-answer cha
 ## Ghidra triggered on the user Mac but blanked the screen — bounded payload + memory cap
 
 - Folder normalization fixed the provider; Ghidra ran. Blank window attributed to (a) pulling full list_strings/list_procedures (tens of MB) over IPC into the renderer, and (b) the Ghidra JVM memory footprint. Fixes: inspectNative now keeps only the bounded overview (no wholesale strings/procedures), every section capped to 512 KB (cap()); GHIDRA_HEADLESS_MAXMEM defaults to 2G with a Settings control (1/2/4/6 GB). Unverified on macOS (no Ghidra here); logic/build/tests green.
+
+## Ghidra "configured but unavailable" — surface provider check + one-click macOS fix
+
+- Availability requires <root>/support/analyzeHeadless to exist AND be executable (GhidraInstallation). Doctor folder check ("ghidra: folder OK") does not test this; providerInspections.ghidra.available / failing check does. diagnoseEngine now returns available + first failing check; native panel shows "Ghidra usable: yes/NO" with the failing code/detail/remediation.
+- Added prepareGhidra IPC + "Fix Ghidra permissions" button (macOS): xattr -dr com.apple.quarantine and chmod +x on support/ and ghidraRun, the usual causes of a downloaded Ghidra being unusable. Re-runs diagnostics after. Unverified on macOS.

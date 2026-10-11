@@ -51,8 +51,12 @@ function diagnoseEngine() {
   return new Promise(resolve => {
     execFile(process.execPath, [reaScript(), 'doctor', '--json'], { timeout: 60000, maxBuffer: 8 * 1024 * 1024, env: { ...process.env, ...engineEnv(), ELECTRON_RUN_AS_NODE: '1' } }, (err, stdout) => {
       let report; try { report = JSON.parse(stdout); } catch { report = null; }
-      const ghidra = report?.scope_checks?.find(c => c.name === 'ghidra') ?? report?.providerInspections?.find(p => p.id === 'ghidra');
-      resolve({ ok: Boolean(report), ghidra: ghidra ?? null, javaHome: engineEnv().JAVA_HOME ?? null, checks: report?.scope_checks ?? [], raw: stdout?.slice(0, 20000) ?? String(err?.message ?? 'no output') });
+      const ghidra = report?.scope_checks?.find(c => c.name === 'ghidra') ?? null;
+      // The real availability verdict lives in providerInspections, not the folder check. Pull it and
+      // the first failing sub-check (e.g. analyzeHeadless not executable) so the true blocker is shown.
+      const inspection = report?.providerInspections?.find(p => p.id === 'ghidra') ?? null;
+      const failing = inspection?.checks?.find(c => !c.ok) ?? null;
+      resolve({ ok: Boolean(report), ghidra, available: inspection?.available ?? null, failing, javaHome: engineEnv().JAVA_HOME ?? null, checks: report?.scope_checks ?? [], raw: stdout?.slice(0, 20000) ?? String(err?.message ?? 'no output') });
     });
   });
 }
@@ -106,6 +110,17 @@ handle('native', async id => { const p = await store.get(id); return p.native ??
 handle('settings', () => readSettings());
 handle('saveSettings', next => { if (!next || typeof next !== 'object') throw new Error('Invalid settings'); const clean = {}; if ('ghidraDir' in next) clean.ghidraDir = typeof next.ghidraDir === 'string' ? next.ghidraDir : ''; if ('javaHome' in next) clean.javaHome = typeof next.javaHome === 'string' ? next.javaHome : ''; if ('ghidraMaxMem' in next) clean.ghidraMaxMem = typeof next.ghidraMaxMem === 'string' ? next.ghidraMaxMem : ''; return writeSettings(clean); });
 handle('diagnoseEngine', () => diagnoseEngine());
+handle('prepareGhidra', async () => {
+  const dir = engineEnv().GHIDRA_INSTALL_DIR;
+  if (!dir || process.platform !== 'darwin') return { ok: false, message: 'No Ghidra folder set, or not macOS.' };
+  const steps = [];
+  const run = (bin, args) => new Promise(r => execFile(bin, args, { timeout: 60000 }, (e) => r(!e)));
+  // Remove the download quarantine that blocks Ghidra's helper scripts, and ensure they are executable.
+  steps.push(['Cleared download quarantine', await run('/usr/bin/xattr', ['-dr', 'com.apple.quarantine', dir])]);
+  steps.push(['Made analyzeHeadless executable', await run('/bin/chmod', ['-R', '+x', join(dir, 'support')])]);
+  steps.push(['Made ghidraRun executable', await run('/bin/chmod', ['+x', join(dir, 'ghidraRun')])]);
+  return { ok: steps.every(s => s[1]), steps: steps.map(([label, ok]) => ({ label, ok })) };
+});
 handle('pickFolder', async () => { const r = await dialog.showOpenDialog(window, { title: 'Select your Ghidra install folder', properties: ['openDirectory'] }); return r.canceled ? null : r.filePaths[0]; });
 handle('licensing', async id => { const p = await store.get(id); return p.licensing ?? { unavailable: p.evidence ? 'This analysis was made before licensing review existed. Analyse the app again.' : 'Needs a completed analysis.' }; });
 handle('events', id => { store.path(id); return store.events(id); });

@@ -3,8 +3,9 @@ import React, { useEffect, useState } from 'react';
 const row = (k, v) => v != null && <div key={k} className="kv"><dt>{k}</dt><dd>{String(v)}</dd></div>;
 
 export function NativeView({ project, onOpenSettings }) {
-  const [data, setData] = useState(null), [error, setError] = useState(''), [diag, setDiag] = useState(null);
-  useEffect(() => { setData(null); setError(''); setDiag(null); window.studio.native(project.id).then(setData).catch(e => setError(e.message)); }, [project.id]);
+  const [data, setData] = useState(null), [error, setError] = useState(''), [diag, setDiag] = useState(null), [fixing, setFixing] = useState(''), [fixed, setFixed] = useState(null);
+  useEffect(() => { setData(null); setError(''); setDiag(null); setFixed(null); window.studio.native(project.id).then(setData).catch(e => setError(e.message)); }, [project.id]);
+  const fixPerms = async () => { setFixing('working'); try { const r = await window.studio.prepareGhidra(); setFixed(r); setDiag(await window.studio.diagnoseEngine()); } catch (e) { setFixed({ ok: false, message: e.message }); } finally { setFixing('done'); } };
   // When an engine is configured but deep analysis did not run, auto-fetch diagnostics so the real
   // reason (Java path, version) is visible without opening Settings.
   useEffect(() => { if (data && !data.unavailable && data.opened && !data.engineReady && project.native?.engineConfigured) window.studio.diagnoseEngine().then(setDiag).catch(() => {}); }, [data]);
@@ -37,9 +38,15 @@ export function NativeView({ project, onOpenSettings }) {
         {data.engineMessage && <p><strong>Engine said:</strong> {data.engineMessage}</p>}
         {diag ? <>
           <p><strong>Java in use:</strong> {diag.javaHome ?? 'NONE FOUND — install Temurin 21, or set the Java home in Settings'}</p>
-          <p><strong>Ghidra:</strong> {diag.ghidra?.ok ? 'folder OK' : (diag.ghidra?.detail ?? 'not detected')}{diag.ghidra?.remediation ? ` — ${diag.ghidra.remediation}` : ''}</p>
+          <p><strong>Ghidra folder:</strong> {diag.ghidra?.ok ? 'OK' : (diag.ghidra?.detail ?? 'not detected')}</p>
+          <p><strong>Ghidra usable:</strong> {diag.available === true ? 'yes' : 'NO'}{diag.failing ? ` — ${diag.failing.code ?? ''}: ${diag.failing.detail ?? ''}${diag.failing.remediation ? ` (${diag.failing.remediation})` : ''}` : ''}</p>
+          {diag.available !== true && <div style={{ marginTop: 8 }}>
+            <p className="hint-text">On macOS, downloaded Ghidra is often blocked by quarantine or its launcher is not executable. Lumen can fix that:</p>
+            <button className="btn primary" onClick={fixPerms} disabled={fixing === 'working'}>{fixing === 'working' ? 'Fixing…' : 'Fix Ghidra permissions'}</button>
+            {fixed && <div className="hint-text">{fixed.steps ? fixed.steps.map((s, i) => <div key={i}>{s.ok ? '✓' : '✗'} {s.label}</div>) : fixed.message}{fixed.ok && ' — now analyse this file again.'}</div>}
+          </div>}
         </> : <p className="hint-text">Checking the engine…</p>}
-        {data.engineLog && <details open><summary>Ghidra engine log (the real error is usually here)</summary><pre className="raw">{data.engineLog}</pre></details>}
+        {data.engineLog && <details open><summary>Ghidra engine log</summary><pre className="raw">{data.engineLog}</pre></details>}
         {diag && <details><summary>Full diagnostics</summary><pre className="raw">{diag.raw}</pre></details>}
       </div>}
     </section> : <section className="card">
