@@ -60,3 +60,11 @@ Fix: spawn REA with ELECTRON_NO_ASAR=1. Added fixtures/simple-app.asar; `npm run
 
 PASSED: npm start → window; user's own Lumen-Test-App.asar analysed to completion with evidence displayed; Ollama gemma2:2b answered a question from the summary (shown labelled "AI EXPLANATION · UNVERIFIED").
 Observed problems: (a) answer shows raw markdown (`**`) because output is rendered as plain escaped text (safe, but unreadable); (b) several model bullets ("uses workers", "uses endpoints", "uses storage") look like REA coverage/limitation family names restated as facts — ungrounded claims with no citations. Confirms item 4 (citation validation) matters. Cancel and Cmd+Q mid-analysis not yet reported.
+
+## Plain-English results, Mac-style UI, delete, AI status, Markdown handoff
+
+- src/core/findings.mjs projects only REA-reported summary fields; every row keeps evidence_id + exact field path; zero = "Not seen" (not "absent"). Tested against a real REA summary fixture (tests/fixtures/summary-evidence.json, home path anonymised).
+- Delete: native confirm dialog in main; refuses the running job; removes only the validated project dir (tested).
+- AI status pill (provider · model, refreshed every 15 s). Safe Markdown renderer builds React elements only.
+- "Copy as Markdown" / "Save…": AI-ready Markdown with provenance; home folder replaced by ~ (tested). Save also writes the full evidence bundle.
+- npm test: 10 passed. Real Electron under Xvfb: analysed fixtures/simple-app.asar via the app bridge, rendered summary/dark/evidence sheet (docs/screenshots). macOS vibrancy/inset title bar not verifiable here.

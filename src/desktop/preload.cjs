@@ -4,8 +4,11 @@ contextBridge.exposeInMainWorld('studio', Object.freeze({
   analyze: path => ipcRenderer.invoke('analyze', path),
   cancel: () => ipcRenderer.invoke('cancel'),
   projects: () => ipcRenderer.invoke('projects'),
+  remove: id => ipcRenderer.invoke('delete', id),
+  platform: () => ipcRenderer.invoke('platform'),
   models: () => ipcRenderer.invoke('models'),
   ask: request => ipcRenderer.invoke('ask', request),
+  copyMarkdown: id => ipcRenderer.invoke('copyMarkdown', id),
   exportReport: id => ipcRenderer.invoke('export', id),
   droppedPath: file => webUtils.getPathForFile(file),
   onProgress: callback => { const listener = (_event, value) => callback(value); ipcRenderer.on('progress', listener); return () => ipcRenderer.removeListener('progress', listener); }

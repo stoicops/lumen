@@ -1,4 +1,5 @@
-import { app, BrowserWindow, ipcMain, dialog, session } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, session, clipboard } from 'electron';
+import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { realpath, stat, writeFile, copyFile } from 'node:fs/promises';
@@ -18,11 +19,26 @@ session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) 
 session.defaultSession.setPermissionCheckHandler(() => false);
 // Renderer cannot fetch any network resource. Local AI runs in the main process.
 session.defaultSession.webRequest.onBeforeRequest((details, callback) => callback({ cancel: !details.url.startsWith('file:') && !details.url.startsWith('devtools:') }));
-window = new BrowserWindow({ width: 1280, height: 860, minWidth: 850, minHeight: 650, title: 'Lumen — Local Software Studio', backgroundColor: '#10131b', webPreferences: { preload: join(here, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true } });
+const mac = process.platform === 'darwin';
+window = new BrowserWindow({ width: 1280, height: 860, minWidth: 900, minHeight: 650, title: 'Lumen', show: false,
+  ...(mac ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 18, y: 18 }, vibrancy: 'sidebar', visualEffectState: 'followWindow', backgroundColor: '#00000000' } : { backgroundColor: '#1c1c1e' }),
+  webPreferences: { preload: join(here, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true } });
+window.once('ready-to-show', () => window.show());
 window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 window.webContents.on('will-navigate', event => event.preventDefault());
 handle('choose', async () => { const result = await dialog.showOpenDialog(window, { title: 'Select JavaScript app folder or ASAR', properties: ['openFile', 'openDirectory'] }); return result.canceled ? null : result.filePaths[0]; });
 handle('projects', () => store.list());
+handle('copyMarkdown', async id => { clipboard.writeText(report(await store.get(id), { home: homedir() })); return true; });
+handle('platform', () => process.platform);
+handle('delete', async id => {
+  if (typeof id !== 'string') throw new Error('Invalid project');
+  if (active?.project.id === id) throw new Error('Cancel the running analysis before deleting it');
+  const project = await store.get(id);
+  const { response } = await dialog.showMessageBox(window, { type: 'warning', buttons: ['Delete', 'Cancel'], defaultId: 1, cancelId: 1,
+    message: `Delete “${project.name}”?`, detail: 'This removes the saved analysis and its evidence from Lumen. Your original app files are not touched. Reports you exported are kept.' });
+  if (response !== 0) return false;
+  await store.delete(id); return true;
+});
 handle('models', () => discoverModels());
 handle('cancel', async () => {
   if (!active) return false;
@@ -70,9 +86,9 @@ handle('ask', async input => {
 });
 handle('export', async id => {
   const project = await store.get(id);
-  const result = await dialog.showSaveDialog(window, { defaultPath: `${project.name.replace(/[^a-z0-9_-]/gi, '_')}-report.md`, filters: [{ name: 'Markdown report', extensions: ['md'] }] });
+  const result = await dialog.showSaveDialog(window, { defaultPath: `${project.name.replace(/[^a-z0-9_-]/gi, '_')}-lumen.md`, filters: [{ name: 'Markdown report', extensions: ['md'] }] });
   if (result.canceled) return false;
-  await writeFile(result.filePath, report(project), 'utf8');
+  await writeFile(result.filePath, report(project, { home: homedir() }), 'utf8');
   if (project.status === 'completed') await copyFile(join(store.path(id), 'evidence.json'), `${result.filePath}.${randomUUID()}.evidence.json`);
   return true;
 });

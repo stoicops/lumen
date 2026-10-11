@@ -59,3 +59,31 @@ test('ps-based descendant listing (macOS path) finds the engine child tree',asyn
   assert.equal(cleanup.verified,true);assert.equal(alive(grandchild),false);
   assert.equal(await descendants(999999999,{method:'ps'}),null,'unknown engine PID is "not enumerable", never "no children"');
 });
+test('plain-English projection only restates fields REA reported, with provenance',async()=>{
+  const {describeEvidence,friendlyError}=await import('../src/core/findings.mjs');
+  const evidence=JSON.parse(await (await import('node:fs/promises')).readFile(new URL('./fixtures/summary-evidence.json',import.meta.url)));
+  const view=describeEvidence(evidence);
+  assert.equal(view.evidenceId,evidence.evidence_id);
+  assert.equal(view.parentId,evidence.normalized_result.parent_evidence_id);
+  for(const f of view.facts){const path=f.field.replace('normalized_result.','').split('.');assert.equal(path.reduce((o,k)=>o[k],evidence.normalized_result),f.value,f.field);assert.equal(f.status,f.value>0?'observed':'not-observed');}
+  assert.ok(view.facts.some(f=>f.label==='Browser windows created'&&f.value===1));
+  assert.equal(view.coverage.families.length,evidence.normalized_result.summary.coverage.semantic.families.length);
+  assert.match(view.headline.at(-1),/does not prove/);
+  assert.equal(describeEvidence(undefined),null);
+  assert.match(friendlyError(JSON.stringify({error:{message:'Invalid',details:{issues:[{message:'No file at path'}]}}})).message,/No file at path/);
+});
+test('Markdown handoff redacts the home folder and keeps provenance',async()=>{
+  const {report}=await import('../src/core/projects.mjs');
+  const evidence=JSON.parse(await (await import('node:fs/promises')).readFile(new URL('./fixtures/summary-evidence.json',import.meta.url)));
+  const md=report({name:'simple-app.asar',status:'completed',createdAt:'2026-10-11T00:00:00Z',target:'/Users/someone/Downloads/simple-app.asar',evidence},{home:'/Users/someone'});
+  assert.ok(!md.includes('/Users/someone'));assert.match(md,/~\/Downloads\/simple-app\.asar/);
+  assert.ok(md.includes(evidence.evidence_id));assert.match(md,/normalized_result\.summary\.electron\.browser_windows/);
+  assert.match(report({name:'x',status:'failed',createdAt:'',target:'/t',error:'boom'}),/did not complete: boom/);
+});
+test('deleting a project removes only that project directory',async()=>{
+  const root=await mkdtemp(join(tmpdir(),'lumen-del-'));const store=new ProjectStore(root);
+  const a=await store.create('/tmp/a'),b=await store.create('/tmp/b');
+  await store.delete(a.id);
+  assert.deepEqual((await store.list()).map(p=>p.id),[b.id]);
+  await assert.rejects(store.delete('../../etc'));
+});
