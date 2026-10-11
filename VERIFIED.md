@@ -69,3 +69,9 @@ Observed problems: (a) answer shows raw markdown (`**`) because output is render
 - "Copy as Markdown" / "Save…": AI-ready Markdown with provenance; home folder replaced by ~ (tested). Save also writes the full evidence bundle.
 - npm test: 10 passed. Real Electron under Xvfb: analysed fixtures/simple-app.asar via the app bridge, rendered summary/dark/evidence sheet (docs/screenshots). macOS vibrancy/inset title bar not verifiable here.
 | macOS screenshot (user) | New UI renders on the Mac; summary, findings, coverage and AI pill "Ollama · dolphin-phi:latest" (green) confirmed. Delete, Copy as Markdown and cancel/quit not yet reported. |
+
+## Architecture map (container, Electron 40 under Xvfb)
+
+- src/core/graph.mjs projects REA's JavaScriptApplicationGraph from the saved bundle: only REA nodes; file-level nodes (artifact/asar-entry/asset/module) folded into the architecture node REA maps them to; every link lists its REA edge IDs and weakest state/confidence. Test asserts no invented nodes/links against a real bundle fixture.
+- simple-app.asar: 8 parts, 9 links (17 file-level nodes folded, 33 raw edges); 3 animated data links: preload→channel, handler←channel, preload→exposed API. Pulse disabled under prefers-reduced-motion; Pause button.
+- npm test: 11 passed. Screenshots docs/screenshots/5,6.

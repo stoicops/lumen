@@ -87,3 +87,24 @@ test('deleting a project removes only that project directory',async()=>{
   assert.deepEqual((await store.list()).map(p=>p.id),[b.id]);
   await assert.rejects(store.delete('../../etc'));
 });
+test('architecture map never invents nodes or links and keeps REA provenance',async()=>{
+  const {projectArchitecture,layout}=await import('../src/core/graph.mjs');
+  const bundle=JSON.parse(await (await import('node:fs/promises')).readFile(new URL('./fixtures/simple-app-bundle.json',import.meta.url)));
+  const graph=bundle.records.find(r=>r.normalized_result?.graph).normalized_result.graph;
+  const rawNodes=new Set(graph.nodes.map(n=>n.node_id)),rawEdges=new Map(graph.edges.map(e=>[e.edge_id,e]));
+  const map=projectArchitecture(bundle);
+  for(const n of map.nodes)assert.ok(rawNodes.has(n.id),'node exists in REA graph');
+  for(const e of map.edges){
+    assert.ok(e.edgeIds.length>0);
+    for(const id of e.edgeIds){const raw=rawEdges.get(id);assert.ok(raw,'edge from REA');assert.equal(raw.relation,e.relation);}
+    if(!e.folded)assert.ok(e.edgeIds.some(id=>rawEdges.get(id).source_node_id===e.source&&rawEdges.get(id).target_node_id===e.target));
+    if(e.state==='observed')assert.ok(e.edgeIds.every(id=>rawEdges.get(id).evidence.state==='observed'),'weakest state kept');
+  }
+  const kinds=map.nodes.map(n=>n.kind);
+  for(const k of ['electron-main','electron-preload','electron-renderer','ipc-channel','ipc-handler','browser-window'])assert.ok(kinds.includes(k),k);
+  const byId=Object.fromEntries(map.nodes.map(n=>[n.id,n]));
+  const flows=map.edges.filter(e=>e.flow&&!e.hidden).map(e=>`${byId[e.source].kind}>${e.relation}>${byId[e.target].kind}:${e.flow}`).sort();
+  assert.deepEqual(flows,['electron-preload>exposes>context-bridge-api:forward','electron-preload>invokes>ipc-channel:forward','ipc-handler>handles>ipc-channel:reverse']);
+  const l=layout(map);for(const n of map.nodes)assert.ok(l.positions[n.id]);
+  assert.equal(projectArchitecture({records:[]}),null);
+});

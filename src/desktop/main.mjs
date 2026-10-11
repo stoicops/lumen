@@ -2,9 +2,10 @@ import { app, BrowserWindow, ipcMain, dialog, session, clipboard } from 'electro
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { realpath, stat, writeFile, copyFile } from 'node:fs/promises';
+import { realpath, stat, writeFile, copyFile, readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { ReaAdapter } from '../core/rea-adapter.mjs';
+import { projectArchitecture } from '../core/graph.mjs';
 import { ProjectStore, report } from '../core/projects.mjs';
 import { discoverModels, askEvidence } from '../core/local-model.mjs';
 const here = dirname(fileURLToPath(import.meta.url));
@@ -29,6 +30,14 @@ window.webContents.on('will-navigate', event => event.preventDefault());
 handle('choose', async () => { const result = await dialog.showOpenDialog(window, { title: 'Select JavaScript app folder or ASAR', properties: ['openFile', 'openDirectory'] }); return result.canceled ? null : result.filePaths[0]; });
 handle('projects', () => store.list());
 handle('copyMarkdown', async id => { clipboard.writeText(report(await store.get(id), { home: homedir() })); return true; });
+handle('map', async id => {
+  const file = join(store.path(id), 'evidence.json');
+  let info; try { info = await stat(file); } catch { return { unavailable: 'No saved evidence bundle for this analysis.' }; }
+  // Bounded read: the full bundle stays on disk; only the projected map crosses IPC.
+  if (info.size > 64 * 1024 * 1024) return { unavailable: `Evidence bundle is ${Math.round(info.size / 1048576)} MB; map view is limited to 64 MB.` };
+  const map = projectArchitecture(JSON.parse(await readFile(file, 'utf8')));
+  return map ?? { unavailable: 'This evidence has no application graph to draw.' };
+});
 handle('platform', () => process.platform);
 handle('delete', async id => {
   if (typeof id !== 'string') throw new Error('Invalid project');

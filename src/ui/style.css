@@ -133,3 +133,48 @@ pre.raw { margin: 0; max-height: 70vh; overflow: auto; white-space: pre-wrap; ov
 .sheet dl { display: grid; grid-template-columns: 120px 1fr; gap: 6px 12px; margin: 12px 0; } .sheet dt { color: var(--text-2); } .sheet dd { margin: 0; overflow-wrap: anywhere; }
 .sheet .btn { float: right; }
 @keyframes fade { from { opacity: 0; } } @keyframes drop { from { transform: translateY(-12px); opacity: 0; } }
+
+/* Architecture map */
+.map-card { padding: 12px; }
+.map-tools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.search { font: 13px var(--font); color: var(--text); background: var(--bg-2); border: 1px solid var(--line-2); border-radius: 7px; padding: 5px 9px; width: 180px; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; flex: 1; }
+.chip { border: 1px solid var(--line-2); background: none; color: var(--text-2); border-radius: 999px; padding: 2px 9px; font: 500 11.5px var(--font); cursor: default; }
+.chip.on { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+.map-buttons { display: flex; gap: 6px; }
+svg.map { width: 100%; height: min(62vh, 640px); background: var(--bg-2); border-radius: 10px; cursor: grab; touch-action: none; user-select: none; }
+svg.map:active { cursor: grabbing; }
+.lane { fill: var(--card); stroke: var(--line); }
+.lane-title { font: 600 11px var(--font); fill: var(--text-3); text-transform: uppercase; letter-spacing: .04em; }
+.node rect { fill: var(--card); stroke: var(--line-2); stroke-width: 1; filter: drop-shadow(0 1px 1.5px rgba(0,0,0,.08)); }
+.node { cursor: pointer; }
+.node:hover rect { stroke: var(--accent); }
+.node.on rect { stroke: var(--accent); stroke-width: 2; }
+.node.match rect { stroke: var(--orange); stroke-width: 2; }
+.node.dim { opacity: .35; }
+.node-kind { font: 600 10px var(--font); fill: var(--text-3); text-transform: uppercase; letter-spacing: .03em; }
+.node-label { font: 500 12.5px var(--font); fill: var(--text); }
+.lane-main rect { fill: color-mix(in srgb, var(--accent) 7%, var(--card)); }
+.lane-messages rect { fill: color-mix(in srgb, var(--purple) 8%, var(--card)); }
+.lane-bridge rect { fill: color-mix(in srgb, var(--orange) 8%, var(--card)); }
+.lane-page rect { fill: color-mix(in srgb, var(--green) 8%, var(--card)); }
+.edge { cursor: pointer; }
+.edge-hit { fill: none; stroke: transparent; stroke-width: 12; }
+.edge-line { fill: none; stroke: var(--text-3); stroke-width: 1.4; }
+.edge.flow .edge-line { stroke: var(--accent); stroke-width: 1.8; }
+.edge.weak .edge-line { stroke-dasharray: 5 5; }
+.edge.on .edge-line, .edge:hover .edge-line { stroke-width: 3; }
+.arrowhead { fill: var(--text-3); }
+.edge-pulse { fill: none; stroke: var(--accent); stroke-width: 4; stroke-linecap: round; stroke-dasharray: 1 22; opacity: 0; pointer-events: none; }
+.map.playing .edge-pulse { opacity: .9; animation: pulse 1.6s linear infinite; }
+.map.playing .edge-pulse.reverse { animation-direction: reverse; }
+@keyframes pulse { from { stroke-dashoffset: 23; } to { stroke-dashoffset: 0; } }
+@media (prefers-reduced-motion: reduce) { .map.playing .edge-pulse { animation: none; opacity: 0; } }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; margin-top: 8px; font-size: 12px; color: var(--text-2); }
+.legend .lg { stroke-width: 2; } .legend .lg.clear { stroke: var(--accent); } .legend .lg.weak { stroke: var(--text-3); stroke-dasharray: 5 4; }
+.legend-note { color: var(--text-3); }
+.facts-dl { display: grid; grid-template-columns: 110px 1fr; gap: 6px 12px; margin: 8px 0; }
+.facts-dl dt { color: var(--text-2); } .facts-dl dd { margin: 0; overflow-wrap: anywhere; } .facts-dl code { display: block; }
+.keyboard-list { columns: 2; }
+.edge.structure .edge-line { opacity: .45; }
+.edge.structure:hover .edge-line, .edge.structure.on .edge-line { opacity: 1; }

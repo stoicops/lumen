@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { describeEvidence, friendlyError } from '../core/findings.mjs';
 import { Markdown } from './markdown.jsx';
+import { ArchitectureMap } from './map.jsx';
 import './style.css';
 
 const STATUS = {
@@ -183,6 +184,7 @@ function App() {
             <div className="actions">
               <div className="segmented" role="tablist">
                 <button role="tab" aria-selected={tab === 'summary'} className={tab === 'summary' ? 'on' : ''} onClick={() => setTab('summary')}>Summary</button>
+                <button role="tab" aria-selected={tab === 'map'} className={tab === 'map' ? 'on' : ''} onClick={() => setTab('map')}>Map</button>
                 <button role="tab" aria-selected={tab === 'raw'} className={tab === 'raw' ? 'on' : ''} onClick={() => setTab('raw')}>Raw evidence</button>
               </div>
               <button className="btn" onClick={() => window.studio.copyMarkdown(project.id).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }).catch(e => setError({ message: e.message }))}>{copied ? 'Copied ✓' : 'Copy as Markdown'}</button>
@@ -190,7 +192,9 @@ function App() {
             </div>
           </div>
           {project.cleanupWarning && <div className="alert warn">{project.cleanupWarning}</div>}
-          <div className="columns">
+          {tab === 'map' && project.status === 'completed' && <ArchitectureMap projectId={project.id} />}
+          {tab === 'map' && project.status !== 'completed' && <section className="card"><p>The map needs a completed analysis.</p></section>}
+          <div className="columns" hidden={tab === 'map'}>
             <div className="col-main">
               {tab === 'summary' && (view ? <Summary view={view} onShow={setSheet} /> : <section className="card"><p>No evidence to show for this analysis{project.status === 'failed' ? ' because it failed' : ''}.</p></section>)}
               {tab === 'raw' && <section className="card"><pre className="raw">{JSON.stringify(project.evidence ?? { status: project.status }, null, 2)}</pre></section>}
