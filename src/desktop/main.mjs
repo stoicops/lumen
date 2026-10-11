@@ -166,9 +166,11 @@ handle('decompile', async id => {
   if (free < need) return { skipped: `Only about ${free.toFixed(1)} GB free; Ghidra needs ~${need.toFixed(1)} GB. Close other apps (and unload your local AI model), or lower the Ghidra memory limit in Settings.` };
   const adapter = new ReaAdapter({ extraEnv: engineEnv() }); const controller = new AbortController();
   decompiling = { adapter, controller };
+  const progress = message => { if (message && !window.isDestroyed()) window.webContents.send('decompileProgress', { message: String(message).slice(0, 200) }); };
   try {
+    progress('Starting Ghidra and importing the binary (first run is slow)…');
     await adapter.connect({ signal: controller.signal });
-    const native = await adapter.inspectNative(target, { signal: controller.signal, providerId: 'ghidra' });
+    const native = await adapter.inspectNative(target, { signal: controller.signal, providerId: 'ghidra', onprogress: p => progress(p?.message ?? p?.note ?? 'Analysing…') });
     native.engineConfigured = true;
     const full = await store.get(id); full.native = native; await store.save(full);
     return native;

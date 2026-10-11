@@ -245,3 +245,7 @@ svg.map:active { cursor: grabbing; }
 .diag { margin-top: 12px; padding: 10px 12px; border-radius: 8px; }
 .diag.ok { background: var(--green-soft); } .diag.bad { background: var(--orange-soft); }
 .diag p { margin: 0 0 4px; } .diag pre { max-height: 240px; }
+.running-row { display: flex; gap: 12px; align-items: center; margin-top: 10px; padding: 10px 12px; background: var(--accent-soft); border-radius: 10px; }
+.struct { margin-top: 10px; } .struct > summary { font-weight: 600; }
+.mono-list { font-family: var(--mono); font-size: 11.5px; max-height: 320px; overflow: auto; columns: 2; }
+.mono-list li { margin: 2px 0; break-inside: avoid; overflow-wrap: anywhere; }

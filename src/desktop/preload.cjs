@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('studio', Object.freeze({
   prepareGhidra: () => ipcRenderer.invoke('prepareGhidra'),
   decompile: id => ipcRenderer.invoke('decompile', id),
   cancelDecompile: () => ipcRenderer.invoke('cancelDecompile'),
+  onDecompileProgress: callback => { const l = (_e, v) => callback(v); ipcRenderer.on('decompileProgress', l); return () => ipcRenderer.removeListener('decompileProgress', l); },
   remove: id => ipcRenderer.invoke('delete', id),
   architecture: id => ipcRenderer.invoke('map', id),
   security: id => ipcRenderer.invoke('security', id),

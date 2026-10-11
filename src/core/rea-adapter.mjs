@@ -113,7 +113,7 @@ export class ReaAdapter {
     if (engineReady) sections.overview = cap(overview.data);
     // On engine failure, include the recent engine stderr tail — it usually names the real Ghidra error.
     const engineLog = !engineReady && providerId ? this.stderrTail?.slice(-4000) ?? null : null;
-    return { opened: true, identity, engineReady, engineMessage: engineReady ? null : overview.message, engineLog, sections };
+    return { opened: true, identity, engineReady, providerUsed: engineReady ? (providerId ?? null) : null, engineMessage: engineReady ? null : overview.message, engineLog, sections };
   }
   export(path, options) { return this.call('export_evidence_bundle', { path, overwrite: false }, options); }
   // Returns a cleanup record; `verified` is true only when the owned process and every enumerated descendant are gone.

@@ -8,10 +8,12 @@ export function NativeView({ project, platform, onOpenSettings }) {
   const [running, setRunning] = useState(false), [runNote, setRunNote] = useState('');
   useEffect(() => { setData(null); setError(''); setDiag(null); setFixed(null); setRunNote(''); window.studio.native(project.id).then(setData).catch(e => setError(e.message)); }, [project.id]);
   const fixPerms = async () => { setFixing('working'); try { const r = await window.studio.prepareGhidra(); setFixed(r); setDiag(await window.studio.diagnoseEngine()); } catch (e) { setFixed({ ok: false, message: e.message }); } finally { setFixing('done'); } };
+  const [progress, setProgress] = useState('');
+  useEffect(() => window.studio.onDecompileProgress(p => setProgress(p.message)), []);
   const decompile = async () => {
-    setRunning(true); setRunNote(''); setError('');
+    setRunning(true); setRunNote(''); setError(''); setProgress('Starting…');
     try { const r = await window.studio.decompile(project.id); if (r.skipped) setRunNote(r.skipped); else setData(r); }
-    catch (e) { setError(e.message); } finally { setRunning(false); }
+    catch (e) { setError(e.message); } finally { setRunning(false); setProgress(''); }
   };
   const canDecompile = data && data.opened && !data.engineReady && project.native?.engineConfigured;
   if (error) return <section className="card"><p>{error}</p></section>;
@@ -36,8 +38,9 @@ export function NativeView({ project, platform, onOpenSettings }) {
         <div className="ask-actions">
           {running ? <button className="btn" onClick={() => window.studio.cancelDecompile()}>Stop</button>
             : <button className="btn primary" onClick={decompile}>Decompile with Ghidra</button>}
-          <span className="meta">{running ? 'Ghidra is working — this can take a few minutes…' : 'heavy: runs the Ghidra engine'}</span>
+          <span className="meta">{running ? '' : 'heavy: runs the Ghidra engine'}</span>
         </div>
+        {running && <div className="running-row"><div className="spinner" /><div><strong>Ghidra is working…</strong><div className="meta">{progress || 'this can take a few minutes'}</div></div></div>}
         {runNote && <p className="inline-error">{runNote}</p>}
       </> : <>
         <p>Lumen can identify this binary and read its signature and layout, but turning machine code back into readable functions needs a decompiler engine. The free, open-source one is <strong>Ghidra</strong>.</p>
@@ -65,13 +68,58 @@ export function NativeView({ project, platform, onOpenSettings }) {
         {diag && <details><summary>Full diagnostics</summary><pre className="raw">{diag.raw}</pre></details>}
       </div>}
     </section> : <section className="card">
-      <h3>Decompilation</h3>
-      <p>Engine ready. Lumen read {sectionKeys.length} section(s): {sectionKeys.join(', ') || 'identification only'}.</p>
-      {data.sections.strings && <p className="meta">Strings and procedures were recovered; open Raw to inspect.</p>}
+      <div className="card-head"><h3>Decompilation result</h3><span className="meta">{data.providerUsed ?? 'engine'} · read without running</span></div>
+      <StatTiles data={data.sections} />
+      {sectionKeys.map(k => <StructuredSection key={k} title={k} value={data.sections[k]} />)}
+      <p className="hint-text">This is what the engine recovered from the compiled binary; it does not prove runtime behaviour.</p>
     </section>}
-
-    {sectionKeys.filter(k => k !== 'strings' && k !== 'procedures' && k !== 'overview').map(k => <section className="card" key={k}>
-      <details><summary>{k} details</summary><pre className="raw">{JSON.stringify(data.sections[k], null, 2).slice(0, 4000)}</pre></details>
-    </section>)}
   </div></div>;
+}
+
+// Humanise a snake/camel key for display.
+const pretty = k => String(k).replace(/[_-]+/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, c => c.toUpperCase());
+
+// Pull the numeric and count-like fields across the result into headline stat tiles.
+function StatTiles({ data }) {
+  const tiles = [];
+  const visit = (obj, depth) => {
+    if (!obj || typeof obj !== 'object' || depth > 2 || tiles.length > 12) return;
+    for (const [k, v] of Object.entries(obj)) {
+      if (typeof v === 'number' && Number.isFinite(v)) tiles.push([pretty(k), v]);
+      else if (Array.isArray(v) && v.length) tiles.push([pretty(k), v.length]);
+      else if (v && typeof v === 'object') visit(v, depth + 1);
+    }
+  };
+  visit(data, 0);
+  const seen = new Set(); const unique = tiles.filter(([l]) => !seen.has(l) && seen.add(l)).slice(0, 8);
+  if (!unique.length) return null;
+  return <div className="sev-summary" style={{ gridTemplateColumns: `repeat(${Math.min(4, unique.length)}, 1fr)` }}>
+    {unique.map(([label, value]) => <div key={label} className="sev-tile"><strong>{value}</strong><span>{label}</span></div>)}
+  </div>;
+}
+
+// Render one result section readably: arrays become searchable, bounded lists; scalars become rows;
+// nested objects recurse one level. Real engine data only — nothing invented.
+function StructuredSection({ title, value, depth = 0 }) {
+  const [query, setQuery] = useState('');
+  if (value == null) return null;
+  if (Array.isArray(value)) {
+    const rows = value.map(v => (v && typeof v === 'object') ? (v.name ?? v.label ?? v.symbol ?? v.string ?? v.value ?? JSON.stringify(v)) : String(v));
+    const filtered = query ? rows.filter(r => r.toLowerCase().includes(query.toLowerCase())) : rows;
+    return <details className="struct" open={depth === 0 && rows.length <= 40}>
+      <summary>{pretty(title)} <span className="meta">({rows.length})</span></summary>
+      {rows.length > 12 && <input className="search" placeholder={`Search ${pretty(title).toLowerCase()}`} value={query} onChange={e => setQuery(e.target.value)} />}
+      <ul className="plain mono-list">{filtered.slice(0, 500).map((r, i) => <li key={i}>{r}</li>)}</ul>
+      {filtered.length > 500 && <p className="hint-text">Showing first 500 of {filtered.length}.</p>}
+    </details>;
+  }
+  if (typeof value === 'object') {
+    const entries = Object.entries(value).filter(([, v]) => v != null && !(typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length === 0));
+    return <details className="struct" open={depth === 0}>
+      <summary>{pretty(title)}</summary>
+      <dl className="kv-list">{entries.filter(([, v]) => typeof v !== 'object').map(([k, v]) => <div key={k} className="kv"><dt>{pretty(k)}</dt><dd>{String(v)}</dd></div>)}</dl>
+      {entries.filter(([, v]) => typeof v === 'object').map(([k, v]) => <StructuredSection key={k} title={k} value={v} depth={depth + 1} />)}
+    </details>;
+  }
+  return <div className="kv"><dt>{pretty(title)}</dt><dd>{String(value)}</dd></div>;
 }
