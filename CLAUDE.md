@@ -45,3 +45,7 @@ Preserve existing user work; no destructive target changes. Run relevant tests a
 - Licensing review (src/core/license-scan.mjs, src/ui/licensing.jsx): detects license/trial mechanisms, rates robustness (trivial/weak/moderate/strong), explains how each works, the weakness class, and the hardening fix. Defensive framing for the app's own author; redacts hardcoded keys; no working bypass produced. In Markdown export.
 - Chat: SSE streaming with Stop, saved multi-turn conversations in SQLite.
 - REMAINING next: installable/signed desktop build (electron-builder), accessibility pass, Windows process enumeration, multi-job queue.
+
+## Packaging DONE (this session)
+
+- electron-builder config + docs/BUILDING.md. `npm run pack` verified in-container: packaged binary analyses a real .asar end to end (engine from app.asar.unpacked). REMAINING: user builds signed .dmg on their Mac (certs are machine-local); add build/icon.png/.icns for a custom icon; .dmg auto-mount verified only by parser (macOS runtime untested here).

@@ -1,8 +1,97 @@
 {
-  "name": "lumen-local-studio", "version": "0.1.0", "private": true, "type": "module",
+  "name": "lumen-local-studio",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
   "description": "A local evidence-first desktop companion for REA",
-  "main": "src/desktop/main.mjs", "engines": {"node": ">=24.11.0"},
-  "scripts": {"build": "node scripts/build.mjs", "start": "npm run build && electron .", "test": "node --test tests/*.test.mjs", "verify:rea": "node scripts/verify-rea.mjs && node scripts/verify-rea.mjs fixtures/simple-app.asar", "verify:rea:electron": "ELECTRON_RUN_AS_NODE=1 electron scripts/verify-rea.mjs fixtures/simple-app.asar"},
-  "dependencies": {"@modelcontextprotocol/client": "2.3.1", "rea-agents": "6.4.0", "react": "19.2.0", "react-dom": "19.2.0"},
-  "devDependencies": {"electron": "40.0.0", "esbuild": "0.25.12"}
+  "author": "Surinder Lall",
+  "main": "src/desktop/main.mjs",
+  "engines": {
+    "node": ">=24.11.0"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "start": "npm run build && electron .",
+    "test": "node --test tests/*.test.mjs",
+    "verify:rea": "node scripts/verify-rea.mjs && node scripts/verify-rea.mjs fixtures/simple-app.asar",
+    "verify:rea:electron": "ELECTRON_RUN_AS_NODE=1 electron scripts/verify-rea.mjs fixtures/simple-app.asar",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:linux": "npm run build && electron-builder --linux"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/client": "2.3.1",
+    "rea-agents": "6.4.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  },
+  "devDependencies": {
+    "electron": "40.0.0",
+    "electron-builder": "25.1.8",
+    "esbuild": "0.25.12"
+  },
+  "build": {
+    "appId": "studio.lumen.local",
+    "productName": "Lumen",
+    "artifactName": "${productName}-${version}-${arch}.${ext}",
+    "files": [
+      "src/desktop/**/*",
+      "src/core/**/*",
+      "dist/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/**/*"
+    ],
+    "extraMetadata": {
+      "main": "src/desktop/main.mjs"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Development",
+      "executableName": "Lumen"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "category": "public.app-category.developer-tools",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "title": "${productName}"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    }
+  }
 }

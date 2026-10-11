@@ -121,3 +121,9 @@ User reported "all works" after pulling the map, security and checked-answer cha
 
 - A non-Electron .app now routes to its Contents/MacOS executable (CFBundleExecutable from Info.plist, else first entry) for native inspection, instead of the old "not an Electron app" error. Reproduced the user error, fixed it; Electron run on a simulated native .app → status completed, family native, inner executable identified.
 - Adapter resolves the REA engine script from app.asar.unpacked in a packaged build (ELECTRON_NO_ASAR spawn cannot read inside app.asar).
+
+## Installable build (electron-builder)
+
+- build config in package.json: productName Lumen, mac dmg+zip (arm64+x64), win nsis, linux AppImage. CRITICAL: asarUnpack node_modules/** so REA (a spawned subprocess) and its deps are real files on disk; adapter rewrites the engine path app.asar→app.asar.unpacked.
+- Verified in container: `npm run pack` produced release/linux-unpacked; launched the PACKAGED binary headless and analysed the demo .asar → status completed, evidence produced, engine ran from unpacked path. (First attempt failed with only rea-agents unpacked — "Connection closed" — fixed by unpacking all node_modules.)
+- macOS .dmg/.exe and signing must be built on the user's own Mac/Windows; see docs/BUILDING.md. Icon is build/icon.svg (default Electron icon until a PNG/icns is added).
